@@ -34,7 +34,8 @@ import {
 } from '../../utils/dateUtils';
 
 export const OutgoingAssignments: React.FC = () => {
-  const { currentCongregation } = useAuth();
+  const { currentCongregation, role } = useAuth();
+  const isBrotherViewer = role === 'brother_viewer';
   const { showToast } = useToast();
   const initial = getCurrentMonthAndYear();
 
@@ -277,15 +278,17 @@ export const OutgoingAssignments: React.FC = () => {
             }}
           />
 
-          <button
-            type="button"
-            onClick={handleOpenCreate}
-            disabled={localSpeakers.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors shrink-0 disabled:opacity-50"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nueva Salida</span>
-          </button>
+          {!isBrotherViewer && (
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              disabled={localSpeakers.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors shrink-0 disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nueva Salida</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -293,9 +296,13 @@ export const OutgoingAssignments: React.FC = () => {
       {assignments.length === 0 ? (
         <EmptyState
           title={`No hay conferencias de salida para ${monthLabel}`}
-          description="Registra las visitas que los conferenciantes locales realizarán a otras congregaciones."
-          actionLabel="Registrar Conferencia de Salida"
-          onAction={handleOpenCreate}
+          description={
+            isBrotherViewer
+              ? "No se han programado conferencias de salida para este mes."
+              : "Registra las visitas que los conferenciantes locales realizarán a otras congregaciones."
+          }
+          actionLabel={isBrotherViewer ? undefined : "Registrar Conferencia de Salida"}
+          onAction={isBrotherViewer ? undefined : handleOpenCreate}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -373,25 +380,27 @@ export const OutgoingAssignments: React.FC = () => {
                 )}
               </div>
 
-              {/* Actions Footer */}
-              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleOpenEdit(assignment)}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-sky-600 hover:bg-slate-50 rounded-lg transition-colors flex items-center gap-1.5"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                  <span>Editar</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeletingId(assignment.id)}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1.5"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Eliminar</span>
-                </button>
-              </div>
+              {/* Actions Footer (Solo para Coordinadores y Administradores) */}
+              {!isBrotherViewer && (
+                <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(assignment)}
+                    className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-sky-600 hover:bg-slate-50 rounded-lg transition-colors flex items-center gap-1.5"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Editar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeletingId(assignment.id)}
+                    className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Eliminar</span>
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

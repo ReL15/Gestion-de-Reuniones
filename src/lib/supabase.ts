@@ -5,7 +5,6 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 // ====================================================================
 export const SUPABASE_DIRECT_URL = 'https://ykkcjxbjxnpaunzzndaj.supabase.co';
 export const SUPABASE_DIRECT_ANON_KEY = 'sb_publishable_0FvRWRm5MfuPT6wOwHvKlg_ZnIo6zu6';
-export const SUPABASE_DIRECT_CONN = 'postgresql://postgres:Kurumi.1015@db.ykkcjxbjxnpaunzzndaj.supabase.co:5432/postgres';
 
 const STORAGE_KEY_URL = 'app_supabase_url';
 const STORAGE_KEY_KEY = 'app_supabase_anon_key';
@@ -52,10 +51,6 @@ export function getStoredSupabaseConfig(): {
   rawConnection: string;
 } {
   // 1. Variables de entorno de Vite
-  const envConn =
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_CONNECTION_STRING) ||
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_DIRECT_URL) ||
-    '';
   const envUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) || '';
   const envKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) || '';
 
@@ -68,20 +63,24 @@ export function getStoredSupabaseConfig(): {
       storedConn = localStorage.getItem(STORAGE_KEY_CONN) || '';
       storedUrl = localStorage.getItem(STORAGE_KEY_URL) || '';
       storedKey = localStorage.getItem(STORAGE_KEY_KEY) || '';
+      if (storedConn) {
+        storedConn = parseSupabaseUrl(storedConn);
+        localStorage.setItem(STORAGE_KEY_CONN, storedConn);
+      }
     } catch {
       // Ignorar errores de localStorage
     }
   }
 
   // 3. Resolución con credenciales directas predeterminadas
-  const rawConnection = envConn || storedConn || envUrl || storedUrl || SUPABASE_DIRECT_CONN;
+  const rawConnection = envUrl || storedUrl || storedConn || SUPABASE_DIRECT_URL;
   const resolvedUrl = parseSupabaseUrl(rawConnection) || SUPABASE_DIRECT_URL;
   const anonKey = (envKey || storedKey || SUPABASE_DIRECT_ANON_KEY).trim();
 
   return {
     url: resolvedUrl,
     anonKey,
-    rawConnection,
+    rawConnection: resolvedUrl,
   };
 }
 
@@ -89,7 +88,7 @@ export function saveStoredSupabaseConfig(connectionOrUrl: string, anonKey: strin
   const parsedUrl = parseSupabaseUrl(connectionOrUrl);
   if (typeof localStorage !== 'undefined') {
     try {
-      localStorage.setItem(STORAGE_KEY_CONN, connectionOrUrl.trim());
+      localStorage.setItem(STORAGE_KEY_CONN, parsedUrl);
       localStorage.setItem(STORAGE_KEY_URL, parsedUrl);
       localStorage.setItem(STORAGE_KEY_KEY, anonKey.trim());
     } catch {

@@ -1,17 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Printer,
-  Download,
   Upload,
   Trash2,
-  Calendar,
-  Clock,
-  Music,
-  MapPin,
-  User,
-  ArrowDownLeft,
-  ArrowUpRight,
-  Sparkles,
   Image as ImageIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -21,10 +12,11 @@ import { MonthSelector } from '../../components/common/MonthSelector';
 import { EmptyState } from '../../components/common/EmptyState';
 import { useToast } from '../../components/common/Toast';
 import {
-  formatFullSpanishDate,
   formatTime12Hour,
   getCurrentMonthAndYear,
   SPANISH_MONTHS,
+  SPANISH_DAYS,
+  parseDateParts,
 } from '../../utils/dateUtils';
 
 export const MonthlySchedule: React.FC = () => {
@@ -104,6 +96,20 @@ export const MonthlySchedule: React.FC = () => {
 
   const monthLabel = `${SPANISH_MONTHS[selectedMonth - 1]} de ${selectedYear}`;
 
+  const formatScheduleDate = (dateStr: string) => {
+    if (!dateStr) return { dayName: '', dayNumber: '', monthName: '', full: '' };
+    const { year, month, day } = parseDateParts(dateStr);
+    const dateObj = new Date(year, month - 1, day, 12, 0, 0);
+    const dayName = SPANISH_DAYS[dateObj.getDay()];
+    const monthName = SPANISH_MONTHS[month - 1];
+    return {
+      dayName,
+      dayNumber: day,
+      monthName,
+      full: `${dayName} ${day} de ${monthName}`,
+    };
+  };
+
   if (!currentCongregation) {
     return (
       <EmptyState
@@ -115,14 +121,14 @@ export const MonthlySchedule: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Action Bar (hidden in print) */}
-      <div className="no-print bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Barra de Acciones (Oculta en Impresión) */}
+      <div className="no-print bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
             Programa de Reuniones de Fin de Semana
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Vista preliminar, formato de impresión oficial y descarga para {monthLabel}
+          <p className="text-xs text-slate-500 mt-0.5">
+            Vista previa y formato de impresión para {monthLabel}
           </p>
         </div>
 
@@ -147,10 +153,10 @@ export const MonthlySchedule: React.FC = () => {
         </div>
       </div>
 
-      {/* Logo manager quick card (hidden in print) */}
-      <div className="no-print bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+      {/* Gestor rápido de Logo (Oculto en Impresión) */}
+      <div className="no-print bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
             {currentCongregation?.logo_url ? (
               <img
                 src={currentCongregation.logo_url}
@@ -158,17 +164,17 @@ export const MonthlySchedule: React.FC = () => {
                 className="w-full h-full object-contain"
               />
             ) : (
-              <ImageIcon className="w-5 h-5 text-slate-300" />
+              <ImageIcon className="w-4 h-4 text-slate-300" />
             )}
           </div>
           <div>
             <span className="font-semibold text-slate-800 block">
-              Logo de la Congregación en el Encabezado
+              Logo de la Congregación
             </span>
             <span className="text-slate-500">
               {currentCongregation?.logo_url
-                ? 'Logo activo. Aparecerá en la esquina superior derecha del programa impreso.'
-                : 'Sin logo cargado. Puedes subir un escudo o monograma para personalizar el documento.'}
+                ? 'Logo activo en la esquina superior del programa impreso.'
+                : 'Opcional: puedes subir un logo o distintivo para el encabezado.'}
             </span>
           </div>
         </div>
@@ -203,195 +209,258 @@ export const MonthlySchedule: React.FC = () => {
       </div>
 
       {/* ========================================================================= */}
-      {/* FORMAL PRINTABLE DOCUMENT CANVAS (VISIBLE ON SCREEN AND IN PRINT)          */}
+      {/* HOJA IMPRIMIBLE DEL PROGRAMA (LIMPIA, NO ABULTADA Y MUY FÁCIL DE LEER)      */}
       {/* ========================================================================= */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 sm:p-12 print:border-none print:shadow-none print:p-0 max-w-4xl mx-auto">
-        {/* ENCABEZADO OFICIAL */}
-        <header className="flex items-start justify-between pb-6 border-b-2 border-slate-800 gap-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 sm:p-8 print:border-none print:shadow-none print:p-0 max-w-4xl mx-auto text-slate-900">
+        
+        {/* ENCABEZADO PRINCIPAL */}
+        <header className="flex items-start justify-between pb-3.5 mb-5 border-b-2 border-slate-800 gap-4">
           <div>
-            <span className="text-xs uppercase tracking-widest text-slate-500 font-bold block mb-1">
-              Programa de Reuniones de Fin de Semana
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              {currentCongregation?.name}
+            <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight uppercase">
+              Programa para la reunión de fin de semana
             </h1>
-            <div className="flex items-center gap-4 mt-2 text-xs text-slate-600">
-              <span className="font-semibold text-indigo-700 uppercase tracking-wide">
-                Mes: {monthLabel}
+            <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-700 font-medium">
+              <span className="font-bold text-slate-900">
+                {currentCongregation?.name}
               </span>
-              <span aria-hidden="true" className="text-slate-300">|</span>
-              <span>
-                Reunión habitual: <strong>{currentCongregation?.weekend_meeting_day}s</strong> a las{' '}
-                <strong className="font-mono tabular-nums">
+              <span aria-hidden="true" className="text-slate-400 font-bold">|</span>
+              <span className="font-semibold text-slate-800">
+                {monthLabel}
+              </span>
+              <span aria-hidden="true" className="text-slate-400">·</span>
+              <span className="text-slate-600">
+                {currentCongregation?.weekend_meeting_day}s a las{' '}
+                <strong className="font-mono text-slate-900">
                   {formatTime12Hour(currentCongregation?.weekend_meeting_time || '09:30')}
                 </strong>
               </span>
             </div>
           </div>
 
-          {/* Espacio reservado para Logo */}
-          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center p-2 shrink-0">
-            {currentCongregation?.logo_url ? (
+          {currentCongregation?.logo_url ? (
+            <div className="shrink-0 flex items-center justify-end">
               <img
                 src={currentCongregation.logo_url}
                 alt={`Logo ${currentCongregation.name}`}
-                className="max-h-full max-w-full object-contain"
+                className="max-h-11 max-w-[110px] object-contain"
               />
-            ) : (
-              <div className="text-center p-2 text-slate-300 font-serif italic text-xs leading-tight">
-                Espacio de Logo
-              </div>
-            )}
-          </div>
+            </div>
+          ) : null}
         </header>
 
         {/* ========================================================================= */}
-        {/* SECCIÓN 1: CONFERENCIAS DE ENTRADA (VISITANTES)                            */}
+        {/* SECCIÓN 1: ENTRADAS                                                       */}
         {/* ========================================================================= */}
-        <section className="mt-8 print-break-inside-avoid">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-300 mb-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
-              <ArrowDownLeft className="w-4 h-4 text-emerald-600 no-print" />
-              <span>Conferencias de Entrada (Oradores Visitantes)</span>
-            </h2>
-            <span className="text-xs font-mono text-slate-500">
-              {incoming.length} {incoming.length === 1 ? 'conferencia' : 'conferencias'}
-            </span>
+        <section className="mb-6 print-break-inside-avoid">
+          {/* Barra de título azul oscuro tipo membrete */}
+          <div className="bg-[#173d63] text-white py-1.5 px-4 text-center font-bold text-xs sm:text-sm tracking-widest uppercase rounded-t-md print:rounded-none">
+            ENTRADAS
           </div>
 
-          {incoming.length === 0 ? (
-            <div className="py-6 text-center text-xs text-slate-400 italic border border-dashed border-slate-200 rounded-xl">
-              No se han programado conferencias de entrada para este mes.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 print:bg-slate-100 text-slate-700 font-semibold">
-                    <th className="py-2.5 px-3">Fecha y Hora</th>
-                    <th className="py-2.5 px-3">Conferenciante</th>
-                    <th className="py-2.5 px-3">Congregación Origen</th>
-                    <th className="py-2.5 px-3">Conferencia / Discurso</th>
-                    <th className="py-2.5 px-3 text-right">Canción</th>
+          <div className="overflow-x-auto border-x border-b border-slate-300 rounded-b-md print:rounded-none">
+            <table className="w-full text-left text-xs sm:text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 font-bold text-[11px] uppercase tracking-wider border-b border-slate-300">
+                  <th className="py-2 px-3 w-[18%]">Fecha y Hora</th>
+                  <th className="py-2 px-3 w-[20%]">Presidente</th>
+                  <th className="py-2 px-3 w-[24%]">Orador Visitante</th>
+                  <th className="py-2 px-3 w-[20%]">Congregación</th>
+                  <th className="py-2 px-3 w-[18%]">Lector</th>
+                </tr>
+              </thead>
+              {incoming.length === 0 ? (
+                <tbody>
+                  <tr>
+                    <td colSpan={5} className="py-4 px-3 text-center text-xs text-slate-400 italic">
+                      No hay conferencias de entrada programadas para este mes.
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {incoming.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/50 print-break-inside-avoid">
-                      <td className="py-3 px-3 align-top whitespace-nowrap">
-                        <span className="font-semibold text-slate-900 block">
-                          {formatFullSpanishDate(item.meeting_date)}
-                        </span>
-                        <span className="font-mono text-slate-500 text-[11px]">
-                          {formatTime12Hour(item.meeting_time)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 align-top font-medium text-slate-900">
-                        {item.speaker_name}
-                        {item.speaker_phone && (
-                          <span className="block text-[11px] font-mono text-slate-400 no-print">
-                            {item.speaker_phone}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 align-top text-slate-700">
-                        {item.origin_congregation_name}
-                      </td>
-                      <td className="py-3 px-3 align-top font-semibold text-slate-800">
-                        &ldquo;{item.talk_title}&rdquo;
-                        {item.notes && (
-                          <span className="block text-[11px] text-slate-400 font-normal italic mt-0.5 no-print">
-                            {item.notes}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 align-top text-right font-mono font-bold text-slate-800">
-                        Canto {item.song_number}
-                      </td>
-                    </tr>
-                  ))}
                 </tbody>
-              </table>
-            </div>
-          )}
+              ) : (
+                incoming.map((item, idx) => {
+                  const dateInfo = formatScheduleDate(item.meeting_date);
+
+                  if (item.is_no_meeting) {
+                    return (
+                      <tbody key={item.id} className="border-b-2 border-slate-300 print-break-inside-avoid">
+                        <tr className="bg-amber-50/70 border-y border-amber-200 print:bg-slate-100 print:border-slate-300">
+                          <td className="py-2.5 px-3 align-middle border-r border-slate-200">
+                            <span className="font-bold text-slate-900 block leading-tight">
+                              {dateInfo.dayName} {dateInfo.dayNumber}
+                            </span>
+                            <span className="font-mono text-slate-600 text-[11px] block mt-0.5">
+                              {formatTime12Hour(item.meeting_time)}
+                            </span>
+                          </td>
+                          <td colSpan={4} className="py-2.5 px-3 align-middle">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-amber-900 print:text-slate-900 text-xs sm:text-sm tracking-wide uppercase">
+                                  NO HAY REUNIÓN
+                                </span>
+                                {item.no_meeting_reason && (
+                                  <span className="text-xs sm:text-sm font-semibold text-slate-700">
+                                    — {item.no_meeting_reason}
+                                  </span>
+                                )}
+                              </div>
+                              {item.president_name && (
+                                <span className="text-[11px] font-medium text-slate-500 italic">
+                                  Presidente local: <strong className="text-slate-700">{item.president_name}</strong>
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    );
+                  }
+
+                  return (
+                    <tbody
+                      key={item.id}
+                      className={`border-b-2 border-slate-300 print-break-inside-avoid ${
+                        idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
+                      }`}
+                    >
+                      {/* Fila Superior: Hermanos y Congregación */}
+                      <tr>
+                        <td
+                          rowSpan={2}
+                          className="py-2.5 px-3 align-middle border-r border-slate-200 w-[18%] bg-slate-50/60 print:bg-transparent"
+                        >
+                          <span className="font-bold text-slate-900 block leading-tight text-sm">
+                            {dateInfo.dayName} {dateInfo.dayNumber}
+                          </span>
+                          <span className="font-mono text-slate-600 text-[11px] block mt-0.5">
+                            {formatTime12Hour(item.meeting_time)}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 align-middle text-slate-900 font-medium w-[20%]">
+                          {item.president_name || '--'}
+                        </td>
+                        <td className="py-2.5 px-3 align-middle font-bold text-slate-900 w-[24%]">
+                          {item.speaker_name || '--'}
+                        </td>
+                        <td className="py-2.5 px-3 align-middle text-slate-700 font-medium w-[20%]">
+                          {item.origin_congregation_name || '--'}
+                        </td>
+                        <td className="py-2.5 px-3 align-middle text-slate-800 font-medium w-[18%]">
+                          {item.reader_name || '--'}
+                        </td>
+                      </tr>
+
+                      {/* Fila Inferior: Título de la Conferencia Abajo */}
+                      <tr className="border-t border-slate-200/70 bg-slate-50/80 print:bg-transparent">
+                        <td colSpan={4} className="py-1.5 px-3 align-middle">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-bold text-slate-700 uppercase text-[10px] tracking-wider shrink-0">
+                                Discurso:
+                              </span>
+                              <span className="font-semibold text-slate-900 leading-snug text-md sm:text-md">
+                                {item.talk_title ? `“${item.talk_title}”` : <span className="italic text-slate-400 font-normal">Por asignar</span>}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  );
+                })
+              )}
+            </table>
+          </div>
         </section>
 
         {/* ========================================================================= */}
-        {/* SECCIÓN 2: CONFERENCIAS DE SALIDA                                         */}
+        {/* SECCIÓN 2: SALIDAS                                                        */}
         {/* ========================================================================= */}
-        <section className="mt-10 print-break-inside-avoid">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-300 mb-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
-              <ArrowUpRight className="w-4 h-4 text-sky-600 no-print" />
-              <span>Conferencias de Salida (Oradores Locales Fuera)</span>
-            </h2>
-            <span className="text-xs font-mono text-slate-500">
-              {outgoing.length} {outgoing.length === 1 ? 'conferencia' : 'conferencias'}
-            </span>
+        <section className="mb-6 print-break-inside-avoid">
+          {/* Barra de título azul oscuro tipo membrete */}
+          <div className="bg-[#173d63] text-white py-1.5 px-4 text-center font-bold text-xs sm:text-sm tracking-widest uppercase rounded-t-md print:rounded-none">
+            SALIDAS
           </div>
 
-          {outgoing.length === 0 ? (
-            <div className="py-6 text-center text-xs text-slate-400 italic border border-dashed border-slate-200 rounded-xl">
-              No se han programado salidas para este mes.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 print:bg-slate-100 text-slate-700 font-semibold">
-                    <th className="py-2.5 px-3">Fecha y Hora</th>
-                    <th className="py-2.5 px-3">Conferenciante Local</th>
-                    <th className="py-2.5 px-3">Congregación Destino</th>
-                    <th className="py-2.5 px-3">Conferencia / Discurso</th>
-                    <th className="py-2.5 px-3 text-right">Canción</th>
+          <div className="overflow-x-auto border-x border-b border-slate-300 rounded-b-md print:rounded-none">
+            <table className="w-full text-left text-xs sm:text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 font-bold text-[11px] uppercase tracking-wider border-b border-slate-300">
+                  <th className="py-2 px-3 w-[22%]">Fecha y Hora</th>
+                  <th className="py-2 px-3 w-[39%]">Discursante</th>
+                  <th className="py-2 px-3 w-[39%]">Congregación Destino</th>
+                </tr>
+              </thead>
+              {outgoing.length === 0 ? (
+                <tbody>
+                  <tr>
+                    <td colSpan={3} className="py-4 px-3 text-center text-xs text-slate-400 italic">
+                      No hay conferencias de salida programadas para este mes.
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {outgoing.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/50 print-break-inside-avoid">
-                      <td className="py-3 px-3 align-top whitespace-nowrap">
-                        <span className="font-semibold text-slate-900 block">
-                          {formatFullSpanishDate(item.meeting_date)}
-                        </span>
-                        <span className="font-mono text-slate-500 text-[11px]">
-                          {formatTime12Hour(item.meeting_time)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 align-top font-medium text-slate-900">
-                        {item.speaker_name}
-                      </td>
-                      <td className="py-3 px-3 align-top font-medium text-sky-900">
-                        {item.destination_congregation_name}
-                      </td>
-                      <td className="py-3 px-3 align-top font-semibold text-slate-800">
-                        &ldquo;{item.talk_title}&rdquo;
-                        {item.notes && (
-                          <span className="block text-[11px] text-slate-400 font-normal italic mt-0.5 no-print">
-                            {item.notes}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 align-top text-right font-mono font-bold text-slate-800">
-                        Canto {item.song_number}
-                      </td>
-                    </tr>
-                  ))}
                 </tbody>
-              </table>
-            </div>
-          )}
+              ) : (
+                outgoing.map((item, idx) => {
+                  const dateInfo = formatScheduleDate(item.meeting_date);
+                  return (
+                    <tbody
+                      key={item.id}
+                      className={`border-b-2 border-slate-300 print-break-inside-avoid ${
+                        idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
+                      }`}
+                    >
+                      {/* Fila Superior: Hermanos y Destino */}
+                      <tr>
+                        <td
+                          rowSpan={2}
+                          className="py-2.5 px-3 align-middle border-r border-slate-200 w-[22%] bg-slate-50/60 print:bg-transparent"
+                        >
+                          <span className="font-bold text-slate-900 block leading-tight text-sm">
+                            {dateInfo.dayName} {dateInfo.dayNumber}
+                          </span>
+                          <span className="font-mono text-slate-600 text-[11px] block mt-0.5">
+                            {formatTime12Hour(item.meeting_time)}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 align-middle font-bold text-slate-900 w-[39%]">
+                          {item.speaker_name || '--'}
+                        </td>
+                        <td className="py-2.5 px-3 align-middle text-slate-800 font-medium w-[39%]">
+                          {item.destination_congregation_name || '--'}
+                        </td>
+                      </tr>
+
+                      {/* Fila Inferior: Título de la Conferencia Abajo */}
+                      <tr className="border-t border-slate-200/70 bg-slate-50/80 print:bg-transparent">
+                        <td colSpan={2} className="py-1.5 px-3 align-middle">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-bold text-slate-700 uppercase text-[10px] tracking-wider shrink-0">
+                                Discurso:
+                              </span>
+                              <span className="font-semibold text-slate-900 leading-snug text-md md:text-md">
+                                {item.talk_title ? `“${item.talk_title}”` : <span className="italic text-slate-400 font-normal">Por asignar</span>}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  );
+                })
+              )}
+            </table>
+          </div>
         </section>
 
-        {/* PIE DE PÁGINA DEL PROGRAMA */}
-        <footer className="mt-12 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-2">
+        {/* PIE DE PÁGINA LIMPIO Y ELEGANTE */}
+        <footer className="mt-6 pt-3 border-t border-slate-300 flex items-center justify-between text-[11px] text-slate-500">
           <span>
-            Generado por el Sistema de Gestión del Programa de Conferencias
-          </span>
-          <span className="font-mono">
-            {currentCongregation?.name} · Actualizado: {new Date().toLocaleDateString('es-ES')}
+            Programa · {currentCongregation?.name}
           </span>
         </footer>
       </div>
     </div>
   );
 };
+

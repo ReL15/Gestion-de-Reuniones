@@ -1,4 +1,4 @@
-export type UserRole = 'super_admin' | 'congregation_admin';
+export type UserRole = 'super_admin' | 'congregation_admin' | 'brother_viewer';
 
 export type Weekday = 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes';
 export type WeekendDay = 'Sábado' | 'Domingo';
@@ -59,15 +59,34 @@ export interface Talk {
   congregation_id?: string;
 }
 
+export interface Reader {
+  id: string;
+  congregation_id: string;
+  full_name: string;
+  phone?: string;
+  can_preside?: boolean;
+  can_read?: boolean;
+  is_active: boolean;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  // joined fields
+  congregation_name?: string;
+}
+
 export interface IncomingAssignment {
   id: string;
   local_congregation_id: string;
-  origin_congregation_id: string;
-  speaker_id: string;
-  talk_id: string;
-  song_number: number;
+  origin_congregation_id?: string;
+  speaker_id?: string;
+  talk_id?: string;
+  reader_id?: string;
+  president_id?: string;
+  song_number?: number;
   meeting_date: string; // YYYY-MM-DD
   meeting_time: string; // HH:MM
+  is_no_meeting?: boolean;
+  no_meeting_reason?: string;
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -75,6 +94,8 @@ export interface IncomingAssignment {
   origin_congregation_name?: string;
   speaker_name?: string;
   speaker_phone?: string;
+  reader_name?: string;
+  president_name?: string;
   talk_title?: string;
 }
 

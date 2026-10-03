@@ -80,22 +80,54 @@ CREATE TABLE IF NOT EXISTS public.talks (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 5. TABLA: incoming_assignments (conferencias de entrada)
-CREATE TABLE IF NOT EXISTS public.incoming_assignments (
+-- 5. TABLA: readers (lectores de La Atalaya y presidentes locales)
+CREATE TABLE IF NOT EXISTS public.readers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    local_congregation_id UUID NOT NULL REFERENCES public.congregations(id) ON DELETE CASCADE,
-    origin_congregation_id UUID NOT NULL REFERENCES public.congregations(id) ON DELETE RESTRICT,
-    speaker_id UUID NOT NULL REFERENCES public.speakers(id) ON DELETE RESTRICT,
-    talk_id UUID NOT NULL REFERENCES public.talks(id) ON DELETE RESTRICT,
-    song_number INTEGER NOT NULL,
-    meeting_date DATE NOT NULL,
-    meeting_time TEXT NOT NULL,
+    congregation_id UUID NOT NULL REFERENCES public.congregations(id) ON DELETE CASCADE,
+    full_name TEXT NOT NULL,
+    phone TEXT,
+    can_read BOOLEAN NOT NULL DEFAULT true,
+    can_preside BOOLEAN NOT NULL DEFAULT false,
+    is_active BOOLEAN NOT NULL DEFAULT true,
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 6. TABLA: outgoing_assignments (conferencias de salida)
+-- Migraciones seguras para readers
+ALTER TABLE public.readers ADD COLUMN IF NOT EXISTS can_read BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.readers ADD COLUMN IF NOT EXISTS can_preside BOOLEAN NOT NULL DEFAULT false;
+
+-- 6. TABLA: incoming_assignments (conferencias de entrada)
+CREATE TABLE IF NOT EXISTS public.incoming_assignments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    local_congregation_id UUID NOT NULL REFERENCES public.congregations(id) ON DELETE CASCADE,
+    origin_congregation_id UUID REFERENCES public.congregations(id) ON DELETE RESTRICT,
+    speaker_id UUID REFERENCES public.speakers(id) ON DELETE RESTRICT,
+    talk_id UUID REFERENCES public.talks(id) ON DELETE RESTRICT,
+    reader_id UUID REFERENCES public.readers(id) ON DELETE SET NULL,
+    president_id UUID REFERENCES public.readers(id) ON DELETE SET NULL,
+    song_number INTEGER,
+    meeting_date DATE NOT NULL,
+    meeting_time TEXT NOT NULL,
+    is_no_meeting BOOLEAN NOT NULL DEFAULT false,
+    no_meeting_reason TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Migraciones seguras para incoming_assignments
+ALTER TABLE public.incoming_assignments ADD COLUMN IF NOT EXISTS reader_id UUID REFERENCES public.readers(id) ON DELETE SET NULL;
+ALTER TABLE public.incoming_assignments ADD COLUMN IF NOT EXISTS president_id UUID REFERENCES public.readers(id) ON DELETE SET NULL;
+ALTER TABLE public.incoming_assignments ADD COLUMN IF NOT EXISTS is_no_meeting BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.incoming_assignments ADD COLUMN IF NOT EXISTS no_meeting_reason TEXT;
+ALTER TABLE public.incoming_assignments ALTER COLUMN origin_congregation_id DROP NOT NULL;
+ALTER TABLE public.incoming_assignments ALTER COLUMN speaker_id DROP NOT NULL;
+ALTER TABLE public.incoming_assignments ALTER COLUMN talk_id DROP NOT NULL;
+ALTER TABLE public.incoming_assignments ALTER COLUMN song_number DROP NOT NULL;
+
+-- 7. TABLA: outgoing_assignments (conferencias de salida)
 CREATE TABLE IF NOT EXISTS public.outgoing_assignments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     local_congregation_id UUID NOT NULL REFERENCES public.congregations(id) ON DELETE CASCADE,
@@ -116,27 +148,103 @@ CREATE TABLE IF NOT EXISTS public.outgoing_assignments (
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_speakers_congregation ON public.speakers(congregation_id);
 CREATE INDEX IF NOT EXISTS idx_talks_speaker ON public.talks(speaker_id);
+CREATE INDEX IF NOT EXISTS idx_readers_congregation ON public.readers(congregation_id);
 CREATE INDEX IF NOT EXISTS idx_incoming_local_date ON public.incoming_assignments(local_congregation_id, meeting_date);
+CREATE INDEX IF NOT EXISTS idx_incoming_reader ON public.incoming_assignments(reader_id);
+CREATE INDEX IF NOT EXISTS idx_incoming_president ON public.incoming_assignments(president_id);
 CREATE INDEX IF NOT EXISTS idx_outgoing_local_date ON public.outgoing_assignments(local_congregation_id, meeting_date);
 CREATE INDEX IF NOT EXISTS idx_outgoing_month_year ON public.outgoing_assignments(local_congregation_id, year, month);
 
 -- ====================================================================
--- ROW LEVEL SECURITY (RLS): DESHABILITADO EN TODAS LAS TABLAS
+-- ROW LEVEL SECURITY (RLS)
 -- ====================================================================
 ALTER TABLE IF EXISTS public.congregations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.speakers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.talks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.readers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.incoming_assignments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.outgoing_assignments DISABLE ROW LEVEL SECURITY;
 
 ALTER TABLE IF EXISTS public.profiles DROP CONSTRAINT IF EXISTS profiles_id_fkey;
 ALTER TABLE IF EXISTS public.profiles ALTER COLUMN user_id DROP NOT NULL;
 
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE user_id = auth.uid() AND role = 'super_admin'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.create_congregation_admin_profile()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  selected_congregation_id UUID;
+BEGIN
+  BEGIN
+    selected_congregation_id := NULLIF(NEW.raw_user_meta_data->>'congregation_id', '')::UUID;
+  EXCEPTION WHEN invalid_text_representation THEN
+    RETURN NEW;
+  END;
+
+  IF selected_congregation_id IS NULL OR NEW.email IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO public.profiles (
+    id, user_id, congregation_id, role, full_name, email, phone
+  )
+  SELECT
+    NEW.id, NEW.id, congregation.id, 'congregation_admin',
+    COALESCE(NULLIF(NEW.raw_user_meta_data->>'full_name', ''), split_part(NEW.email, '@', 1)),
+    NEW.email, NULLIF(NEW.raw_user_meta_data->>'phone', '')
+  FROM public.congregations AS congregation
+  WHERE congregation.id = selected_congregation_id AND congregation.is_active
+  ON CONFLICT (id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS create_congregation_admin_profile ON auth.users;
+CREATE TRIGGER create_congregation_admin_profile
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.create_congregation_admin_profile();
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Profiles visible to owner or super admins" ON public.profiles;
+CREATE POLICY "Profiles visible to owner or super admins"
+  ON public.profiles FOR SELECT TO authenticated
+  USING (
+    auth.uid() = user_id
+    OR lower(email) = lower(auth.jwt()->>'email')
+    OR public.is_super_admin()
+  );
+DROP POLICY IF EXISTS "Super admins manage profiles" ON public.profiles;
+CREATE POLICY "Super admins manage profiles"
+  ON public.profiles FOR ALL TO authenticated
+  USING (public.is_super_admin())
+  WITH CHECK (public.is_super_admin());
+
+REVOKE ALL ON TABLE public.profiles FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.profiles TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.is_super_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_super_admin() TO authenticated;
+REVOKE ALL ON FUNCTION public.create_congregation_admin_profile() FROM PUBLIC, anon, authenticated;
+
 GRANT ALL ON TABLE public.congregations TO anon, authenticated, service_role;
-GRANT ALL ON TABLE public.profiles TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.speakers TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.talks TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.readers TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.incoming_assignments TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.outgoing_assignments TO anon, authenticated, service_role;`;
 
@@ -154,7 +262,7 @@ export const AdminSupabase: React.FC = () => {
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
     if (!connectionString.trim() || !anonKey.trim()) {
-      showToast('Por favor completa la URL/cadena de conexión y la Clave Anónima.', 'error');
+      showToast('Por favor completa la URL del proyecto y la clave anónima.', 'error');
       return;
     }
 
@@ -187,10 +295,10 @@ export const AdminSupabase: React.FC = () => {
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            Conexión Directa a Supabase y Esquema SQL
+            Configuración de Supabase y Esquema SQL
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Conexión directa a tu base de datos Supabase en la nube y script de migración SQL
+            URL pública del proyecto y script de migración SQL
           </p>
         </div>
       </div>
@@ -218,7 +326,7 @@ export const AdminSupabase: React.FC = () => {
             <span className="text-xs opacity-90">
               {isConnected
                 ? `Conectado a ${currentConfig.url}. Las congregaciones, conferenciantes y programas se sincronizan directamente.`
-                : 'Configura las variables en el archivo .env o introduce la cadena de conexión directa y la anon key a continuación.'}
+                : 'Configura la URL pública del proyecto y la anon key.'}
             </span>
           </div>
         </div>
@@ -228,13 +336,13 @@ export const AdminSupabase: React.FC = () => {
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
           <Database className="w-4 h-4 text-indigo-600" />
-          <span>Cadena de Conexión Directa de Supabase</span>
+          <span>URL del Proyecto Supabase</span>
         </h3>
 
         <form onSubmit={handleSaveConfig} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
-              Cadena de Conexión Directa o URL del Proyecto
+              URL Pública del Proyecto
             </label>
             <div className="relative">
               <Link2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -242,7 +350,7 @@ export const AdminSupabase: React.FC = () => {
                 type="text"
                 value={connectionString}
                 onChange={(e) => setConnectionString(e.target.value)}
-                placeholder="https://xyzabcdefg.supabase.co o postgresql://postgres:password@db.xyz.supabase.co:5432/postgres"
+                placeholder="https://xyzabcdefg.supabase.co"
                 className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white font-mono"
               />
             </div>
@@ -252,7 +360,7 @@ export const AdminSupabase: React.FC = () => {
               </p>
             )}
             <p className="text-[11px] text-slate-400 mt-1">
-              Acepta la URL del proyecto (<code className="text-slate-600 font-mono">https://xxxx.supabase.co</code>) o la cadena directa PostgreSQL (<code className="text-slate-600 font-mono">postgresql://postgres:...@db.xxxx.supabase.co:5432/postgres</code>).
+              Utiliza la URL pública del proyecto; no introduzcas una contraseña ni una cadena privada de PostgreSQL.
             </p>
           </div>
 

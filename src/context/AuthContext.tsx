@@ -3,32 +3,27 @@ import { Profile, Congregation, UserRole } from '../types/database';
 import { dataService } from '../services/dataService';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 
-export interface LocalCredential {
-  email: string;
-  password?: string;
-  profile: Profile;
-}
-
-export const DEFAULT_INITIAL_ADMIN: Profile = {
-  id: 'usr-admin-initial',
-  user_id: 'usr-admin-initial',
-  congregation_id: null,
-  role: 'super_admin',
-  full_name: 'Administrador Principal',
-  email: 'admin@conferencias.org',
-  phone: '',
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
-
-export const DEFAULT_ADMIN_PASSWORD = 'admin123';
-
 interface AuthContextType {
   currentUser: Profile | null;
   currentCongregation: Congregation | null;
   role: UserRole | null;
   isLoading: boolean;
-  login: (email: string, password?: string) => Promise<boolean>;
+  login: (email: string, password?: string) => Promise<{ success: boolean; message?: string }>;
+  loginWithPhone: (
+    phone: string,
+    selectedBrotherId?: string
+  ) => Promise<{
+    success: boolean;
+    candidates?: Array<{
+      id: string;
+      full_name: string;
+      phone: string;
+      congregation_id: string;
+      congregation_name: string;
+      roles_description: string;
+    }>;
+    message?: string;
+  }>;
   register: (params: {
     email: string;
     password: string;
@@ -47,26 +42,50 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const CURRENT_PROFILE_KEY = 'jw_prog_active_profile_id';
 const SELECTED_CONG_KEY = 'jw_prog_selected_cong_id';
-const LOCAL_CREDENTIALS_KEY = 'jw_prog_auth_users_v2';
+const BROTHER_SESSION_KEY = 'jw_prog_brother_session';
 
-function getLocalCredentials(): LocalCredential[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_CREDENTIALS_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
+function hasCoordinatorAccess(profile: Profile | null | undefined): profile is Profile {
+  return Boolean(
+    profile &&
+      (profile.role === 'super_admin' ||
+        (profile.role === 'congregation_admin' && profile.congregation_id))
+  );
 }
 
-function saveLocalCredential(cred: LocalCredential) {
-  try {
-    const list = getLocalCredentials().filter((c) => c.email.toLowerCase() !== cred.email.toLowerCase());
-    list.push(cred);
-    localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify(list));
-  } catch (e) {
-    console.error('Error saving local credential:', e);
+async function getAuthenticatedProfile(userId: string, email?: string): Promise<Profile | null> {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb
+    .from('profiles')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) return null;
+
+  let profile = data as Profile | null;
+  if (!profile) {
+    const { data: legacyProfile, error: legacyError } = await sb
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+    if (legacyError) return null;
+    profile = legacyProfile as Profile | null;
   }
+
+  if (!profile && email) {
+    const { data: emailProfile, error: emailError } = await sb
+      .from('profiles')
+      .select('*')
+      .eq('email', email.toLowerCase())
+      .eq('role', 'congregation_admin')
+      .not('congregation_id', 'is', null)
+      .limit(1)
+      .maybeSingle();
+    if (emailError) return null;
+    profile = emailProfile as Profile | null;
+  }
+
+  return hasCoordinatorAccess(profile) ? profile : null;
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -81,7 +100,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const congs = await dataService.getCongregations();
       setAllCongregations(congs);
 
-      const profiles = await dataService.getProfiles();
       let activeProfile: Profile | null = null;
 
       // 1. Si Supabase está configurado, verificar sesión activa de auth
@@ -90,14 +108,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (sb) {
           const { data: sessionData } = await sb.auth.getSession();
           if (sessionData.session?.user) {
-            const userEmail = sessionData.session.user.email?.toLowerCase();
-            activeProfile =
-              profiles.find(
-                (p) =>
-                  p.email.toLowerCase() === userEmail ||
-                  p.id === sessionData.session?.user.id ||
-                  p.user_id === sessionData.session?.user.id
-              ) || null;
+            activeProfile = await getAuthenticatedProfile(
+              sessionData.session.user.id,
+              sessionData.session.user.email
+            );
+            if (!activeProfile) await sb.auth.signOut();
           }
         }
       }
@@ -106,14 +121,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!activeProfile) {
         const savedProfileId = localStorage.getItem(CURRENT_PROFILE_KEY);
         if (savedProfileId) {
-          if (savedProfileId === DEFAULT_INITIAL_ADMIN.id) {
-            activeProfile = DEFAULT_INITIAL_ADMIN;
-          } else {
-            activeProfile = profiles.find((p) => p.id === savedProfileId) || null;
-            if (!activeProfile) {
-              const localCreds = getLocalCredentials();
-              const found = localCreds.find((c) => c.profile.id === savedProfileId);
-              if (found) activeProfile = found.profile;
+          if (savedProfileId.startsWith('brother-')) {
+            const rawSession = localStorage.getItem(BROTHER_SESSION_KEY);
+            if (rawSession) {
+              try {
+                const parsed = JSON.parse(rawSession);
+                if (parsed?.profile && parsed.profile.id === savedProfileId) {
+                  activeProfile = parsed.profile;
+                }
+              } catch (e) {
+                console.error('Error al restaurar sesión de hermano:', e);
+              }
             }
           }
         }
@@ -167,15 +185,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.removeItem(CURRENT_PROFILE_KEY);
             localStorage.removeItem(SELECTED_CONG_KEY);
           } else if (event === 'SIGNED_IN' && session?.user) {
-            const profiles = await dataService.getProfiles();
-            const matched = profiles.find(
-              (p) =>
-                p.email.toLowerCase() === session.user.email?.toLowerCase() ||
-                p.id === session.user.id
-            );
+            const matched = await getAuthenticatedProfile(session.user.id, session.user.email);
             if (matched) {
               setCurrentUser(matched);
               localStorage.setItem(CURRENT_PROFILE_KEY, matched.id);
+            } else {
+              setCurrentUser(null);
             }
           }
         });
@@ -218,112 +233,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const login = async (email: string, password?: string): Promise<boolean> => {
+  const login = async (
+    email: string,
+    password?: string
+  ): Promise<{ success: boolean; message?: string }> => {
     setIsLoading(true);
     try {
       const cleanEmail = email.toLowerCase().trim();
       const cleanPass = (password || '').trim();
-
-      // 1. Verificación del Administrador Inicial por defecto
-      if (
-        cleanEmail === DEFAULT_INITIAL_ADMIN.email.toLowerCase() &&
-        (cleanPass === 'admin' || cleanPass === 'admin123' || cleanPass === 'admin123456')
-      ) {
-        setCurrentUser(DEFAULT_INITIAL_ADMIN);
-        localStorage.setItem(CURRENT_PROFILE_KEY, DEFAULT_INITIAL_ADMIN.id);
-        const congs = await dataService.getCongregations();
-        setCurrentCongregation(congs[0] || null);
-        setIsLoading(false);
-        return true;
+      if (!cleanPass || !isSupabaseConfigured()) {
+        return { success: false, message: 'Ingresa tu contraseña para continuar.' };
       }
 
-      // 2. Intentar inicio de sesión directo con Supabase Auth si está configurado
-      if (isSupabaseConfigured() && cleanPass) {
-        const sb = getSupabaseClient();
-        if (sb) {
-          const { data, error } = await sb.auth.signInWithPassword({
-            email: cleanEmail,
-            password: cleanPass,
-          });
-
-          if (!error && data.user) {
-            const profiles = await dataService.getProfiles();
-            let matched: Profile | undefined = profiles.find(
-              (p) => p.email.toLowerCase() === cleanEmail || p.id === data.user.id
-            );
-
-            if (!matched) {
-              matched = {
-                id: data.user.id,
-                user_id: data.user.id,
-                congregation_id: null,
-                email: cleanEmail,
-                full_name: data.user.user_metadata?.full_name || cleanEmail.split('@')[0],
-                role: (data.user.user_metadata?.role as UserRole) || 'super_admin',
-                phone: data.user.user_metadata?.phone || '',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              };
-            }
-
-            const activeProfile: Profile = matched;
-            setCurrentUser(activeProfile);
-            localStorage.setItem(CURRENT_PROFILE_KEY, activeProfile.id);
-
-            if (activeProfile.congregation_id) {
-              const cong = await dataService.getCongregation(activeProfile.congregation_id);
-              setCurrentCongregation(cong);
-            } else {
-              const congs = await dataService.getCongregations();
-              setCurrentCongregation(congs[0] || null);
-            }
-
-            setIsLoading(false);
-            return true;
-          }
-        }
+      const sb = getSupabaseClient();
+      const { data, error } = await sb.auth.signInWithPassword({
+        email: cleanEmail,
+        password: cleanPass,
+      });
+      if (error || !data.user) {
+        return { success: false, message: 'Correo o contraseña incorrectos.' };
       }
 
-      // 3. Verificación en usuarios registrados localmente
-      const localCreds = getLocalCredentials();
-      const localMatch = localCreds.find((c) => c.email.toLowerCase() === cleanEmail);
-      if (localMatch && (!localMatch.password || localMatch.password === cleanPass)) {
-        setCurrentUser(localMatch.profile);
-        localStorage.setItem(CURRENT_PROFILE_KEY, localMatch.profile.id);
-        if (localMatch.profile.congregation_id) {
-          const cong = await dataService.getCongregation(localMatch.profile.congregation_id);
-          setCurrentCongregation(cong);
-        } else {
-          const congs = await dataService.getCongregations();
-          setCurrentCongregation(congs[0] || null);
-        }
-        setIsLoading(false);
-        return true;
+      const matched = await getAuthenticatedProfile(data.user.id, data.user.email);
+      if (!matched) {
+        await sb.auth.signOut();
+        return {
+          success: false,
+          message:
+            'La contraseña es correcta, pero esta cuenta no tiene un perfil de coordinador vinculado. Ejecuta el SQL actualizado de Supabase y verifica que el correo coincida con el registrado.',
+        };
       }
 
-      // 4. Verificación en perfiles de dataService
-      const profiles = await dataService.getProfiles();
-      const matched = profiles.find((p) => p.email.toLowerCase() === cleanEmail);
-      if (matched) {
-        setCurrentUser(matched);
-        localStorage.setItem(CURRENT_PROFILE_KEY, matched.id);
-        if (matched.congregation_id) {
-          const cong = await dataService.getCongregation(matched.congregation_id);
-          setCurrentCongregation(cong);
-        } else {
-          const congs = await dataService.getCongregations();
-          setCurrentCongregation(congs[0] || null);
-        }
-        setIsLoading(false);
-        return true;
-      }
-
-      setIsLoading(false);
-      return false;
+      setCurrentUser(matched);
+      localStorage.setItem(CURRENT_PROFILE_KEY, matched.id);
+      const congregation = matched.congregation_id
+        ? await dataService.getCongregation(matched.congregation_id)
+        : (await dataService.getCongregations())[0] || null;
+      setCurrentCongregation(congregation);
+      return { success: true };
     } catch (e) {
       console.error('Error de autenticación:', e);
+      return { success: false, message: 'No se pudo conectar con Supabase. Intenta de nuevo.' };
+    } finally {
       setIsLoading(false);
-      return false;
     }
   };
 
@@ -331,7 +283,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string;
     password: string;
     full_name: string;
-    role?: UserRole;
     congregation_id?: string | null;
     phone?: string;
   }): Promise<{ success: boolean; message?: string }> => {
@@ -339,81 +290,132 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const cleanEmail = params.email.toLowerCase().trim();
       const cleanName = params.full_name.trim();
-      const userRole: UserRole = params.role || 'super_admin';
-      const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `usr-${Date.now()}`;
-      const now = new Date().toISOString();
-
-      let supabaseUserId = newId;
-
-      // 1. Si Supabase está configurado, registrar en Supabase Auth
-      if (isSupabaseConfigured()) {
-        const sb = getSupabaseClient();
-        if (sb) {
-          const { data, error } = await sb.auth.signUp({
-            email: cleanEmail,
-            password: params.password,
-            options: {
-              data: {
-                full_name: cleanName,
-                role: userRole,
-              },
-            },
-          });
-
-          if (error) {
-            setIsLoading(false);
-            return { success: false, message: error.message };
-          }
-
-          if (data.user) {
-            supabaseUserId = data.user.id;
-          }
-        }
+      const userRole: UserRole = 'congregation_admin';
+      if (!params.congregation_id) {
+        setIsLoading(false);
+        return { success: false, message: 'Selecciona una congregación para continuar.' };
       }
-
-      const newProfile: Profile = {
-        id: supabaseUserId,
-        user_id: supabaseUserId,
-        congregation_id: params.congregation_id || null,
-        role: userRole,
-        full_name: cleanName,
-        email: cleanEmail,
-        phone: params.phone || '',
-        created_at: now,
-        updated_at: now,
-      };
-
-      // Guardar en Supabase o localmente
-      if (isSupabaseConfigured()) {
-        const sb = getSupabaseClient();
-        if (sb) {
-          await sb.from('profiles').insert(newProfile);
-        }
+      if (!isSupabaseConfigured()) {
+        setIsLoading(false);
+        return { success: false, message: 'La autenticación segura no está configurada.' };
       }
-
-      saveLocalCredential({
+      const sb = getSupabaseClient();
+      const { data, error } = await sb.auth.signUp({
         email: cleanEmail,
         password: params.password,
-        profile: newProfile,
+        options: {
+          data: {
+            full_name: cleanName,
+            role: userRole,
+            congregation_id: params.congregation_id,
+            phone: params.phone || '',
+          },
+        },
       });
+      if (error || !data.user) {
+        setIsLoading(false);
+        return { success: false, message: error?.message || 'No se pudo crear la cuenta.' };
+      }
 
-      setCurrentUser(newProfile);
-      localStorage.setItem(CURRENT_PROFILE_KEY, newProfile.id);
-
-      if (newProfile.congregation_id) {
-        const cong = await dataService.getCongregation(newProfile.congregation_id);
-        setCurrentCongregation(cong);
+      if (data.session) {
+        const newProfile = await getAuthenticatedProfile(data.user.id, data.user.email);
+        if (!newProfile) {
+          setIsLoading(false);
+          return {
+            success: false,
+            message: 'La cuenta se creó, pero no pudo vincularse a una congregación activa.',
+          };
+        }
+        setCurrentUser(newProfile);
+        localStorage.setItem(CURRENT_PROFILE_KEY, newProfile.id);
+        const congregation = await dataService.getCongregation(params.congregation_id);
+        setCurrentCongregation(congregation);
       } else {
-        const congs = await dataService.getCongregations();
-        setCurrentCongregation(congs[0] || null);
+        setIsLoading(false);
+        return {
+          success: true,
+          message: 'Cuenta creada. Confirma tu correo electrónico antes de iniciar sesión.',
+        };
       }
 
       setIsLoading(false);
-      return { success: true };
+      return { success: true, message: 'Cuenta creada e inicio de sesión exitoso.' };
     } catch (err: any) {
       console.error('Error al registrar usuario:', err);
       setIsLoading(false);
       return { success: false, message: err.message || 'Error al crear la cuenta' };
+    }
+  };
+
+  const loginWithPhone = async (
+    phone: string,
+    selectedBrotherId?: string
+  ): Promise<{
+    success: boolean;
+    candidates?: Array<{
+      id: string;
+      full_name: string;
+      phone: string;
+      congregation_id: string;
+      congregation_name: string;
+      roles_description: string;
+    }>;
+    message?: string;
+  }> => {
+    setIsLoading(true);
+    try {
+      const candidates = await dataService.findBrothersByPhone(phone);
+      if (candidates.length === 0) {
+        setIsLoading(false);
+        return {
+          success: false,
+          message: 'No se encontró ningún lector, presidente o discursante registrado con este número.',
+        };
+      }
+
+      let selected = candidates[0];
+      if (selectedBrotherId) {
+        const match = candidates.find((c) => c.id === selectedBrotherId);
+        if (match) selected = match;
+      } else if (candidates.length > 1) {
+        setIsLoading(false);
+        return {
+          success: false,
+          candidates,
+          message: 'Se encontraron varios hermanos registrados con este número. Por favor selecciona tu nombre.',
+        };
+      }
+
+      const congs = await dataService.getCongregations();
+      const targetCong = congs.find((c) => c.id === selected.congregation_id) || null;
+
+      const brotherProfile: Profile = {
+        id: `brother-${selected.id}`,
+        user_id: `brother-${selected.id}`,
+        congregation_id: selected.congregation_id,
+        role: 'brother_viewer',
+        full_name: selected.full_name,
+        email: `${selected.phone}@participante.jw`,
+        phone: selected.phone,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      setCurrentUser(brotherProfile);
+      setCurrentCongregation(targetCong);
+      localStorage.setItem(CURRENT_PROFILE_KEY, brotherProfile.id);
+      localStorage.setItem(SELECTED_CONG_KEY, selected.congregation_id);
+      localStorage.setItem(
+        BROTHER_SESSION_KEY,
+        JSON.stringify({ profile: brotherProfile, congregation: targetCong, brother: selected })
+      );
+
+      setIsLoading(false);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Error en loginWithPhone:', err);
+      setIsLoading(false);
+      return { success: false, message: err.message || 'Error al autenticar por teléfono' };
     }
   };
 
@@ -430,11 +432,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     localStorage.removeItem(CURRENT_PROFILE_KEY);
     localStorage.removeItem(SELECTED_CONG_KEY);
+    localStorage.removeItem(BROTHER_SESSION_KEY);
     setCurrentUser(null);
     setCurrentCongregation(null);
   };
 
   const switchCongregation = async (congregationId: string) => {
+    // Si el usuario es un hermano participante, no puede cambiar de congregación
+    if (currentUser?.role === 'brother_viewer') return;
+
     const cong = await dataService.getCongregation(congregationId);
     if (cong) {
       setCurrentCongregation(cong);
@@ -450,6 +456,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: currentUser?.role || null,
         isLoading,
         login,
+        loginWithPhone,
         register,
         logout,
         switchCongregation,

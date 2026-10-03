@@ -36,6 +36,17 @@
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  div[class*="lg:pl-72"] {
+    padding-left: 0 !important;
+  }
 }
 
 @media screen {

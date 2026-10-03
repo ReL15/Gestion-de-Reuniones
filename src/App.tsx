@@ -16,6 +16,7 @@ import { IncomingAssignments } from './pages/congregation/IncomingAssignments';
 import { OutgoingAssignments } from './pages/congregation/OutgoingAssignments';
 import { Speakers } from './pages/congregation/Speakers';
 import { Talks } from './pages/congregation/Talks';
+import { Readers } from './pages/congregation/Readers';
 import { MonthlySchedule } from './pages/congregation/MonthlySchedule';
 import { CongregationSettings } from './pages/congregation/CongregationSettings';
 
@@ -37,8 +38,15 @@ const MainLayout: React.FC = () => {
       setCurrentTab('admin-dashboard');
     } else if (role === 'congregation_admin' && currentTab.startsWith('admin-')) {
       setCurrentTab('dashboard');
+    } else if (
+      role === 'brother_viewer' &&
+      currentTab !== 'dashboard' &&
+      currentTab !== 'entradas' &&
+      currentTab !== 'salidas'
+    ) {
+      setCurrentTab('dashboard');
     }
-  }, [role]);
+  }, [role, currentTab]);
 
   if (isLoading) {
     return (
@@ -64,6 +72,8 @@ const MainLayout: React.FC = () => {
         return 'Conferenciantes Locales';
       case 'conferencias':
         return 'Conferencias y Discursos';
+      case 'lectores':
+        return 'Lectores de La Atalaya';
       case 'programa':
         return 'Programa Mensual Imprimible';
       case 'configuracion':
@@ -86,17 +96,27 @@ const MainLayout: React.FC = () => {
     setCurrentTab('conferencias');
   };
 
+  const handleSelectTab = (tab: string) => {
+    if (
+      role === 'brother_viewer' &&
+      tab !== 'dashboard' &&
+      tab !== 'entradas' &&
+      tab !== 'salidas'
+    ) {
+      return;
+    }
+    setCurrentTab(tab);
+    if (tab !== 'conferencias') {
+      setTalksSpeakerFilter(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-100/60 flex">
       {/* Sidebar */}
       <Sidebar
         currentTab={currentTab}
-        onSelectTab={(tab) => {
-          setCurrentTab(tab);
-          if (tab !== 'conferencias') {
-            setTalksSpeakerFilter(null);
-          }
-        }}
+        onSelectTab={handleSelectTab}
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
       />
@@ -110,7 +130,7 @@ const MainLayout: React.FC = () => {
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {/* Render Active View */}
-          {currentTab === 'dashboard' && <Dashboard onNavigate={(tab) => setCurrentTab(tab)} />}
+          {currentTab === 'dashboard' && <Dashboard onNavigate={handleSelectTab} />}
           {currentTab === 'entradas' && <IncomingAssignments />}
           {currentTab === 'salidas' && <OutgoingAssignments />}
           {currentTab === 'conferenciantes' && (
@@ -119,6 +139,7 @@ const MainLayout: React.FC = () => {
           {currentTab === 'conferencias' && (
             <Talks initialSpeakerFilter={talksSpeakerFilter} />
           )}
+          {currentTab === 'lectores' && <Readers />}
           {currentTab === 'programa' && <MonthlySchedule />}
           {currentTab === 'configuracion' && <CongregationSettings />}
 

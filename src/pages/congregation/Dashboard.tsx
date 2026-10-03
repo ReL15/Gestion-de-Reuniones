@@ -23,7 +23,8 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
-  const { currentCongregation } = useAuth();
+  const { currentCongregation, role } = useAuth();
+  const isBrotherViewer = role === 'brother_viewer';
   const currentInitial = getCurrentMonthAndYear();
   const [selectedMonth, setSelectedMonth] = useState(currentInitial.month);
   const [selectedYear, setSelectedYear] = useState(currentInitial.year);
@@ -92,7 +93,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       </div>
 
       {/* Primary KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isBrotherViewer ? '' : 'lg:grid-cols-4'} gap-4`}>
         {/* Entradas */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-300 transition-all">
           <div className="flex items-center justify-between">
@@ -143,55 +144,60 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           </button>
         </div>
 
-        {/* Conferenciantes */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Conferenciantes Locales
-            </span>
-            <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Users className="w-5 h-5" />
+        {/* Conferenciantes y Temas (Ocultos para Hermanos Participantes) */}
+        {!isBrotherViewer && (
+          <>
+            {/* Conferenciantes */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-300 transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Conferenciantes Locales
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                  <Users className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-4 flex items-baseline gap-2">
+                <span className="text-3xl font-bold text-slate-900 font-mono tabular-nums">
+                  {stats?.activeSpeakersCount ?? 0}
+                </span>
+                <span className="text-xs text-slate-500">activos</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate('conferenciantes')}
+                className="mt-3 flex items-center gap-1 text-xs font-semibold text-purple-600 hover:text-purple-800 transition-colors"
+              >
+                Administrar <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
-          </div>
-          <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-slate-900 font-mono tabular-nums">
-              {stats?.activeSpeakersCount ?? 0}
-            </span>
-            <span className="text-xs text-slate-500">activos</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('conferenciantes')}
-            className="mt-3 flex items-center gap-1 text-xs font-semibold text-purple-600 hover:text-purple-800 transition-colors"
-          >
-            Administrar <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
 
-        {/* Temas */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Discursos Registrados
-            </span>
-            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <BookOpen className="w-5 h-5" />
+            {/* Temas */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-300 transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Discursos Registrados
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-4 flex items-baseline gap-2">
+                <span className="text-3xl font-bold text-slate-900 font-mono tabular-nums">
+                  {stats?.activeTalksCount ?? 0}
+                </span>
+                <span className="text-xs text-slate-500">disponibles</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate('conferencias')}
+                className="mt-3 flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-800 transition-colors"
+              >
+                Ver temas <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
-          </div>
-          <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-slate-900 font-mono tabular-nums">
-              {stats?.activeTalksCount ?? 0}
-            </span>
-            <span className="text-xs text-slate-500">disponibles</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('conferencias')}
-            className="mt-3 flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-800 transition-colors"
-          >
-            Ver temas <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
+          </>
+        )}
       </div>
 
       {/* Next Upcoming Meetings Preview */}
@@ -257,7 +263,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
               onClick={() => onNavigate('entradas')}
               className="w-full py-2 px-3 text-xs font-semibold text-center text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl transition-colors"
             >
-              Gestionar todas las entradas del mes
+              {isBrotherViewer ? 'Ver todas las entradas del mes' : 'Gestionar todas las entradas del mes'}
             </button>
           </div>
         </div>
@@ -325,34 +331,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
               onClick={() => onNavigate('salidas')}
               className="w-full py-2 px-3 text-xs font-semibold text-center text-sky-600 hover:text-sky-800 hover:bg-sky-50 rounded-xl transition-colors"
             >
-              Gestionar todas las salidas del mes
+              {isBrotherViewer ? 'Ver todas las salidas del mes' : 'Gestionar todas las salidas del mes'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Quick Access Card for Monthly Schedule */}
-      <div className="bg-gradient-to-r from-indigo-900 to-slate-900 text-white p-6 rounded-2xl shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-indigo-300 text-xs font-semibold uppercase tracking-wider">
-            <Sparkles className="w-4 h-4" />
-            <span>Documento Oficial</span>
+      {/* Quick Access Card for Monthly Schedule (Oculto para Hermanos Participantes) */}
+      {!isBrotherViewer && (
+        <div className="bg-gradient-to-r from-indigo-900 to-slate-900 text-white p-6 rounded-2xl shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-indigo-300 text-xs font-semibold uppercase tracking-wider">
+              <Sparkles className="w-4 h-4" />
+              <span>Documento Oficial</span>
+            </div>
+            <h3 className="text-lg font-bold text-white mt-1">
+              Generar Programa Mensual de {monthLabel}
+            </h3>
+            <p className="text-xs text-slate-300 mt-1 max-w-xl">
+              Prepara el documento formal con encabezado, logo de congregación, lista ordenada de entradas y salidas listo para imprimir en tamaño carta o descargar en PDF.
+            </p>
           </div>
-          <h3 className="text-lg font-bold text-white mt-1">
-            Generar Programa Mensual de {monthLabel}
-          </h3>
-          <p className="text-xs text-slate-300 mt-1 max-w-xl">
-            Prepara el documento formal con encabezado, logo de congregación, lista ordenada de entradas y salidas listo para imprimir en tamaño carta o descargar en PDF.
-          </p>
+          <button
+            type="button"
+            onClick={() => onNavigate('programa')}
+            className="px-5 py-2.5 bg-white text-slate-900 font-semibold text-sm rounded-xl hover:bg-slate-100 transition-colors shrink-0 shadow-sm"
+          >
+            Generar programa del mes
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => onNavigate('programa')}
-          className="px-5 py-2.5 bg-white text-slate-900 font-semibold text-sm rounded-xl hover:bg-slate-100 transition-colors shrink-0 shadow-sm"
-        >
-          Generar programa del mes
-        </button>
-      </div>
+      )}
     </div>
   );
 };

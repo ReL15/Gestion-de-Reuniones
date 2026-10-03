@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   Users,
   BookOpen,
+  BookCheck,
   FileText,
   Settings,
   Building2,
@@ -33,6 +34,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     useAuth();
 
   const isSuperAdmin = role === 'super_admin';
+  const isBrotherViewer = role === 'brother_viewer';
+
+  const brotherNavItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'entradas', label: 'Entradas (Visitantes)', icon: ArrowDownLeft },
+    { id: 'salidas', label: 'Salidas', icon: ArrowUpRight },
+  ];
 
   const congregationNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -40,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'salidas', label: 'Salidas', icon: ArrowUpRight },
     { id: 'conferenciantes', label: 'Conferenciantes', icon: Users },
     { id: 'conferencias', label: 'Conferencias', icon: BookOpen },
+    { id: 'lectores', label: 'Lectores y Presidentes', icon: BookCheck },
     { id: 'programa', label: 'Programa Mensual', icon: FileText },
     { id: 'configuracion', label: 'Configuración / Logo', icon: Settings },
   ];
@@ -51,7 +60,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'admin-supabase', label: 'Esquema SQL / Supabase', icon: Database },
   ];
 
-  const navItems = isSuperAdmin ? adminNavItems : congregationNavItems;
+  const navItems = isSuperAdmin
+    ? adminNavItems
+    : isBrotherViewer
+    ? brotherNavItems
+    : congregationNavItems;
 
   return (
     <>
@@ -86,7 +99,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Current Congregation selector or display */}
             <div className="mt-4 p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/60">
               <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                {isSuperAdmin ? 'Congregación en vista:' : 'Congregación Local:'}
+                {isSuperAdmin
+                  ? 'Congregación en vista:'
+                  : isBrotherViewer
+                  ? 'Tu Congregación:'
+                  : 'Congregación Local:'}
               </div>
               {isSuperAdmin ? (
                 <div className="mt-1 relative">
@@ -190,7 +207,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between px-2 pt-1">
             <div className="min-w-0 pr-2">
               <p className="text-xs font-semibold text-white truncate">{currentUser?.full_name}</p>
-              <p className="text-[11px] text-slate-400 truncate">{currentUser?.email}</p>
+              <p className="text-[11px] text-slate-400 truncate">
+                {isBrotherViewer ? (
+                  <span className="text-emerald-400 font-medium">
+                    Tel: {currentUser?.phone || 'Participante'}
+                  </span>
+                ) : (
+                  currentUser?.email
+                )}
+              </p>
             </div>
             <button
               type="button"
