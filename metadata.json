@@ -1,0 +1,6 @@
+{
+  "name": "Gestión de Programa de Conferencias",
+  "description": "Sistema de gestión de conferencias y reuniones de fin de semana para congregaciones: conferenciantes, discursos, entradas, salidas y programa imprimible.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
