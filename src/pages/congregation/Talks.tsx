@@ -185,6 +185,15 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
     return matchesSpeaker && matchesSearch;
   });
 
+  if (!currentCongregation) {
+    return (
+      <EmptyState
+        title="No hay congregación seleccionada"
+        description="Por favor selecciona una congregación en la barra lateral para ver y administrar sus temas de conferencia."
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Header & Filter Controls */}

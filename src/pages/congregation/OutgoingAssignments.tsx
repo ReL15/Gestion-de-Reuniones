@@ -245,6 +245,15 @@ export const OutgoingAssignments: React.FC = () => {
   const speakerTalks = localTalks.filter((t) => t.speaker_id === formSpeakerId);
   const monthLabel = `${SPANISH_MONTHS[selectedMonth - 1]} ${selectedYear}`;
 
+  if (!currentCongregation) {
+    return (
+      <EmptyState
+        title="No hay congregación seleccionada"
+        description="Por favor selecciona una congregación en la barra lateral para ver y gestionar las salidas de conferenciantes locales."
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Banner / Month Selector */}

@@ -131,6 +131,15 @@ export const Speakers: React.FC<SpeakersProps> = ({ onNavigateToTalks }) => {
     return s.full_name.toLowerCase().includes(q) || s.phone.includes(q);
   });
 
+  if (!currentCongregation) {
+    return (
+      <EmptyState
+        title="No hay congregación seleccionada"
+        description="Por favor selecciona una congregación en la barra lateral para ver y administrar sus conferenciantes locales."
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header bar */}

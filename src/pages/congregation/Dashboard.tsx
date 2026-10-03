@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import { dataService } from '../../services/dataService';
 import { MonthlyStats } from '../../types/database';
 import { MonthSelector } from '../../components/common/MonthSelector';
+import { EmptyState } from '../../components/common/EmptyState';
 import { formatFullSpanishDate, formatTime12Hour, getCurrentMonthAndYear, SPANISH_MONTHS } from '../../utils/dateUtils';
 
 interface DashboardProps {
@@ -53,9 +54,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   if (!currentCongregation) {
     return (
-      <div className="p-8 text-center text-slate-500">
-        Por favor selecciona una congregación para ver el panel.
-      </div>
+      <EmptyState
+        title="No hay congregación seleccionada"
+        description="Por favor selecciona una congregación en el selector lateral o registra una congregación para comenzar a ver las estadísticas del panel."
+        actionLabel="Gestionar Congregaciones"
+        onAction={() => onNavigate('admin-congregations')}
+      />
     );
   }
 

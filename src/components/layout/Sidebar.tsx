@@ -29,7 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { currentUser, currentCongregation, role, logout, allCongregations, switchCongregation, quickLoginAs } =
+  const { currentUser, currentCongregation, role, logout, allCongregations, switchCongregation } =
     useAuth();
 
   const isSuperAdmin = role === 'super_admin';
@@ -95,6 +95,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onChange={(e) => switchCongregation(e.target.value)}
                     className="w-full bg-slate-900 text-white text-xs font-semibold py-1.5 px-2 rounded-lg border border-slate-700 appearance-none cursor-pointer focus:outline-hidden"
                   >
+                    {!currentCongregation && (
+                      <option value="" disabled>
+                        Seleccionar congregación...
+                      </option>
+                    )}
+                    {allCongregations.length === 0 && (
+                      <option value="" disabled>
+                        Sin congregaciones registradas
+                      </option>
+                    )}
                     {allCongregations.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -174,39 +184,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </nav>
         </div>
 
-        {/* User profile & demo account switch */}
+        {/* User profile & logout */}
         <div className="p-3 border-t border-slate-800 space-y-2">
-          {/* Quick Demo Switcher */}
-          <div className="bg-slate-800/70 rounded-xl p-2.5 border border-slate-700/50">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1.5">
-              Cambio Rápido de Rol (Demo)
-            </span>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => quickLoginAs('user-superadmin')}
-                className={`text-[11px] py-1 px-2 rounded-md font-medium text-left truncate transition-colors ${
-                  isSuperAdmin ? 'bg-indigo-600 text-white' : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700'
-                }`}
-                title="Super Admin"
-              >
-                Super Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => quickLoginAs('user-admin-central')}
-                className={`text-[11px] py-1 px-2 rounded-md font-medium text-left truncate transition-colors ${
-                  currentUser?.id === 'user-admin-central'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700'
-                }`}
-                title="Admin Central"
-              >
-                Admin Central
-              </button>
-            </div>
-          </div>
-
           {/* User info & logout */}
           <div className="flex items-center justify-between px-2 pt-1">
             <div className="min-w-0 pr-2">

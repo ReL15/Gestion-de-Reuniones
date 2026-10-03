@@ -16,6 +16,7 @@ import { dataService } from '../../services/dataService';
 import { useToast } from '../../components/common/Toast';
 import { Weekday, WeekendDay } from '../../types/database';
 import { formatTime12Hour } from '../../utils/dateUtils';
+import { EmptyState } from '../../components/common/EmptyState';
 
 export const CongregationSettings: React.FC = () => {
   const { currentCongregation, refreshData } = useAuth();
@@ -108,6 +109,15 @@ export const CongregationSettings: React.FC = () => {
       showToast(err.message || 'Error al eliminar el logo', 'error');
     }
   };
+
+  if (!currentCongregation) {
+    return (
+      <EmptyState
+        title="No hay congregación seleccionada"
+        description="Por favor selecciona una congregación en la barra lateral para configurar sus datos y horarios."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">

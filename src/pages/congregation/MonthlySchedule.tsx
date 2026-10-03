@@ -18,6 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import { dataService } from '../../services/dataService';
 import { IncomingAssignment, OutgoingAssignment } from '../../types/database';
 import { MonthSelector } from '../../components/common/MonthSelector';
+import { EmptyState } from '../../components/common/EmptyState';
 import { useToast } from '../../components/common/Toast';
 import {
   formatFullSpanishDate,
@@ -102,6 +103,15 @@ export const MonthlySchedule: React.FC = () => {
   };
 
   const monthLabel = `${SPANISH_MONTHS[selectedMonth - 1]} de ${selectedYear}`;
+
+  if (!currentCongregation) {
+    return (
+      <EmptyState
+        title="No hay congregación seleccionada"
+        description="Por favor selecciona una congregación en la barra lateral para ver su programa mensual imprimible."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">

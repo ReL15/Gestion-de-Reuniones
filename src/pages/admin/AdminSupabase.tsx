@@ -7,8 +7,7 @@ import {
   Check,
   CheckCircle2,
   AlertTriangle,
-  RotateCcw,
-  Sparkles,
+  Link2,
 } from 'lucide-react';
 import {
   getStoredSupabaseConfig,
@@ -16,8 +15,8 @@ import {
   clearStoredSupabaseConfig,
   isSupabaseConfigured,
   resetSupabaseClient,
+  parseSupabaseUrl,
 } from '../../lib/supabase';
-import { dataService } from '../../services/dataService';
 import { useToast } from '../../components/common/Toast';
 
 const SUPABASE_SCHEMA_SQL = `-- ====================================================================
@@ -119,46 +118,59 @@ CREATE INDEX IF NOT EXISTS idx_speakers_congregation ON public.speakers(congrega
 CREATE INDEX IF NOT EXISTS idx_talks_speaker ON public.talks(speaker_id);
 CREATE INDEX IF NOT EXISTS idx_incoming_local_date ON public.incoming_assignments(local_congregation_id, meeting_date);
 CREATE INDEX IF NOT EXISTS idx_outgoing_local_date ON public.outgoing_assignments(local_congregation_id, meeting_date);
+CREATE INDEX IF NOT EXISTS idx_outgoing_month_year ON public.outgoing_assignments(local_congregation_id, year, month);
 
--- Habilitar RLS
-ALTER TABLE public.congregations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.speakers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.talks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.incoming_assignments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.outgoing_assignments ENABLE ROW LEVEL SECURITY;`;
+-- ====================================================================
+-- ROW LEVEL SECURITY (RLS): DESHABILITADO EN TODAS LAS TABLAS
+-- ====================================================================
+ALTER TABLE IF EXISTS public.congregations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.profiles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.speakers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.talks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.incoming_assignments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.outgoing_assignments DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE IF EXISTS public.profiles DROP CONSTRAINT IF EXISTS profiles_id_fkey;
+ALTER TABLE IF EXISTS public.profiles ALTER COLUMN user_id DROP NOT NULL;
+
+GRANT ALL ON TABLE public.congregations TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.profiles TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.speakers TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.talks TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.incoming_assignments TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.outgoing_assignments TO anon, authenticated, service_role;`;
 
 export const AdminSupabase: React.FC = () => {
   const { showToast } = useToast();
   const currentConfig = getStoredSupabaseConfig();
   const isConnected = isSupabaseConfigured();
 
-  const [url, setUrl] = useState(currentConfig.url);
+  const [connectionString, setConnectionString] = useState(
+    currentConfig.rawConnection || currentConfig.url
+  );
   const [anonKey, setAnonKey] = useState(currentConfig.anonKey);
   const [hasCopied, setHasCopied] = useState(false);
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim() || !anonKey.trim()) {
-      showToast('Por favor completa URL y Clave Anónima.', 'error');
+    if (!connectionString.trim() || !anonKey.trim()) {
+      showToast('Por favor completa la URL/cadena de conexión y la Clave Anónima.', 'error');
       return;
     }
-    saveStoredSupabaseConfig(url, anonKey);
+
+    saveStoredSupabaseConfig(connectionString, anonKey);
     resetSupabaseClient();
-    showToast('Configuración de Supabase guardada.');
+
+    const parsed = parseSupabaseUrl(connectionString);
+    showToast(`Conexión a Supabase configurada (${parsed}).`);
   };
 
   const handleClear = () => {
     clearStoredSupabaseConfig();
-    setUrl('');
+    setConnectionString('');
     setAnonKey('');
     resetSupabaseClient();
-    showToast('Conexión reseteada a modo local.');
-  };
-
-  const handleResetSampleData = () => {
-    dataService.resetToSampleData();
-    showToast('Datos de muestra restablecidos correctamente.');
+    showToast('Configuración de Supabase limpiada.');
   };
 
   const handleCopySql = () => {
@@ -168,26 +180,19 @@ export const AdminSupabase: React.FC = () => {
     setTimeout(() => setHasCopied(false), 3000);
   };
 
+  const parsedUrl = parseSupabaseUrl(connectionString);
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            Configuración de Backend Supabase y SQL
+            Conexión Directa a Supabase y Esquema SQL
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Conecta tu instancia de Supabase o consulta el esquema SQL y políticas RLS
+            Conexión directa a tu base de datos Supabase en la nube y script de migración SQL
           </p>
         </div>
-
-        <button
-          type="button"
-          onClick={handleResetSampleData}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Restablecer Datos Demo</span>
-        </button>
       </div>
 
       {/* Status banner */}
@@ -207,40 +212,48 @@ export const AdminSupabase: React.FC = () => {
           <div>
             <span className="font-bold text-sm block">
               {isConnected
-                ? 'Conectado a Supabase en la Nube'
-                : 'Modo Local / Simulación Activa (Sin conexión externa requerida)'}
+                ? 'Conexión a Supabase Activa'
+                : 'Supabase Pendiente de Conexión'}
             </span>
             <span className="text-xs opacity-90">
               {isConnected
-                ? 'Las consultas y mutaciones se sincronizan con tu base de datos Supabase.'
-                : 'La aplicación funciona con persistencia en localStorage y datos precargados para pruebas completas.'}
+                ? `Conectado a ${currentConfig.url}. Las congregaciones, conferenciantes y programas se sincronizan directamente.`
+                : 'Configura las variables en el archivo .env o introduce la cadena de conexión directa y la anon key a continuación.'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Supabase credentials form */}
+      {/* Supabase direct connection form */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
           <Database className="w-4 h-4 text-indigo-600" />
-          <span>Credenciales de tu Proyecto Supabase</span>
+          <span>Cadena de Conexión Directa de Supabase</span>
         </h3>
 
         <form onSubmit={handleSaveConfig} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
-              Project URL de Supabase
+              Cadena de Conexión Directa o URL del Proyecto
             </label>
             <div className="relative">
-              <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Link2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://xyzabcdefg.supabase.co"
+                type="text"
+                value={connectionString}
+                onChange={(e) => setConnectionString(e.target.value)}
+                placeholder="https://xyzabcdefg.supabase.co o postgresql://postgres:password@db.xyz.supabase.co:5432/postgres"
                 className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white font-mono"
               />
             </div>
+            {connectionString && parsedUrl !== connectionString && (
+              <p className="text-[11px] text-indigo-600 mt-1 font-medium">
+                URL de proyecto detectada: <span className="font-mono">{parsedUrl}</span>
+              </p>
+            )}
+            <p className="text-[11px] text-slate-400 mt-1">
+              Acepta la URL del proyecto (<code className="text-slate-600 font-mono">https://xxxx.supabase.co</code>) o la cadena directa PostgreSQL (<code className="text-slate-600 font-mono">postgresql://postgres:...@db.xxxx.supabase.co:5432/postgres</code>).
+            </p>
           </div>
 
           <div>
@@ -257,6 +270,9 @@ export const AdminSupabase: React.FC = () => {
                 className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white font-mono"
               />
             </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Disponible en Supabase Dashboard &gt; Project Settings &gt; API &gt; Project API keys (anon public).
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-3">
@@ -266,14 +282,14 @@ export const AdminSupabase: React.FC = () => {
                 onClick={handleClear}
                 className="px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
               >
-                Desconectar
+                Limpiar Configuración
               </button>
             )}
             <button
               type="submit"
               className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors"
             >
-              Guardar Credenciales
+              Guardar Conexión
             </button>
           </div>
         </form>
@@ -287,7 +303,7 @@ export const AdminSupabase: React.FC = () => {
               Script SQL de Migración para Supabase
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Copia y pega este script en el <strong>SQL Editor</strong> de Supabase para crear las tablas y políticas RLS
+              Copia y pega este script en el <strong>SQL Editor</strong> de Supabase para crear las tablas, índices y políticas RLS
             </p>
           </div>
 

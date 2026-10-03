@@ -5,9 +5,10 @@ import { dataService } from '../../services/dataService';
 import { Profile } from '../../types/database';
 import { Modal } from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
+import { EmptyState } from '../../components/common/EmptyState';
 
 export const AdminUsers: React.FC = () => {
-  const { allCongregations } = useAuth();
+  const { allCongregations, refreshData } = useAuth();
   const { showToast } = useToast();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,6 +22,7 @@ export const AdminUsers: React.FC = () => {
   });
 
   useEffect(() => {
+    refreshData();
     loadProfiles();
   }, []);
 
@@ -105,63 +107,76 @@ export const AdminUsers: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
-                <th className="py-3 px-4">Usuario</th>
-                <th className="py-3 px-4">Rol del Sistema</th>
-                <th className="py-3 px-4">Congregación Asignada</th>
-                <th className="py-3 px-4">Contacto</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map((profile) => {
-                const cong = allCongregations.find((c) => c.id === profile.congregation_id);
-                return (
-                  <tr key={profile.id} className="hover:bg-slate-50/50">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-                          {profile.role === 'super_admin' ? (
-                            <ShieldCheck className="w-4 h-4 text-purple-600" />
-                          ) : (
-                            <UserCheck className="w-4 h-4 text-indigo-600" />
-                          )}
+      {filtered.length === 0 ? (
+        <EmptyState
+          title="No hay usuarios encontrados"
+          description={
+            searchQuery
+              ? `No se encontraron coordinadores o usuarios que coincidan con "${searchQuery}".`
+              : 'Asigna o registra un coordinador para comenzar a administrar los accesos.'
+          }
+          actionLabel="Asignar Coordinador"
+          onAction={handleOpenCreate}
+        />
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                  <th className="py-3 px-4">Usuario</th>
+                  <th className="py-3 px-4">Rol del Sistema</th>
+                  <th className="py-3 px-4">Congregación Asignada</th>
+                  <th className="py-3 px-4">Contacto</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map((profile) => {
+                  const cong = allCongregations.find((c) => c.id === profile.congregation_id);
+                  return (
+                    <tr key={profile.id} className="hover:bg-slate-50/50">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+                            {profile.role === 'super_admin' ? (
+                              <ShieldCheck className="w-4 h-4 text-purple-600" />
+                            ) : (
+                              <UserCheck className="w-4 h-4 text-indigo-600" />
+                            )}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900 block">{profile.full_name}</span>
+                            <span className="text-[11px] text-slate-400 font-mono">{profile.email}</span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="font-bold text-slate-900 block">{profile.full_name}</span>
-                          <span className="text-[11px] text-slate-400 font-mono">{profile.email}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                          profile.role === 'super_admin'
-                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                        }`}
-                      >
-                        {profile.role === 'super_admin'
-                          ? 'Super Administrador'
-                          : 'Administrador de Congregación'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-slate-700 font-medium">
-                      {cong ? cong.name : 'Acceso Global (Todas)'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-500">
-                      {profile.phone || '--'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                            profile.role === 'super_admin'
+                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                          }`}
+                        >
+                          {profile.role === 'super_admin'
+                            ? 'Super Administrador'
+                            : 'Administrador de Congregación'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-700 font-medium">
+                        {cong ? cong.name : 'Acceso Global (Todas)'}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-500">
+                        {profile.phone || '--'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       <Modal
         isOpen={isModalOpen}

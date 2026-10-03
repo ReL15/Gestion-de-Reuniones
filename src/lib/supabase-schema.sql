@@ -23,10 +23,10 @@ CREATE TABLE IF NOT EXISTS public.congregations (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 2. TABLA: profiles (extensión de auth.users con roles)
+-- 2. TABLA: profiles (usuarios y administradores)
 CREATE TABLE IF NOT EXISTS public.profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID,
     congregation_id UUID REFERENCES public.congregations(id) ON DELETE SET NULL,
     role TEXT NOT NULL CHECK (role IN ('super_admin', 'congregation_admin')),
     full_name TEXT NOT NULL,
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS public.outgoing_assignments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Índices para optimizar consultas de calendario y filtrado por congregación
+-- Índices
 CREATE INDEX IF NOT EXISTS idx_speakers_congregation ON public.speakers(congregation_id);
 CREATE INDEX IF NOT EXISTS idx_talks_speaker ON public.talks(speaker_id);
 CREATE INDEX IF NOT EXISTS idx_incoming_local_date ON public.incoming_assignments(local_congregation_id, meeting_date);
@@ -101,135 +101,46 @@ CREATE INDEX IF NOT EXISTS idx_outgoing_local_date ON public.outgoing_assignment
 CREATE INDEX IF NOT EXISTS idx_outgoing_month_year ON public.outgoing_assignments(local_congregation_id, year, month);
 
 -- ====================================================================
--- FUNCIONES AUXILIARES PARA RLS
+-- ROW LEVEL SECURITY (RLS): DESHABILITADO EN TODAS LAS TABLAS
 -- ====================================================================
 
--- Obtener el rol del usuario autenticado
-CREATE OR REPLACE FUNCTION public.get_auth_role()
-RETURNS TEXT AS $$
-  SELECT role FROM public.profiles WHERE id = auth.uid();
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+ALTER TABLE IF EXISTS public.congregations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.profiles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.speakers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.talks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.incoming_assignments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.outgoing_assignments DISABLE ROW LEVEL SECURITY;
 
--- Obtener la congregación del usuario autenticado
-CREATE OR REPLACE FUNCTION public.get_auth_congregation_id()
-RETURNS UUID AS $$
-  SELECT congregation_id FROM public.profiles WHERE id = auth.uid();
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+-- Quitar restricción estricta de usuarios en profiles para creación flexible
+ALTER TABLE IF EXISTS public.profiles DROP CONSTRAINT IF EXISTS profiles_id_fkey;
+ALTER TABLE IF EXISTS public.profiles ALTER COLUMN user_id DROP NOT NULL;
 
--- ====================================================================
--- CONFIGURACIÓN DE ROW LEVEL SECURITY (RLS)
--- ====================================================================
-
-ALTER TABLE public.congregations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.speakers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.talks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.incoming_assignments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.outgoing_assignments ENABLE ROW LEVEL SECURITY;
-
--- 1. Políticas de Congregaciones:
--- Lectura: Todos los usuarios autenticados pueden ver congregaciones activas (necesario para elegir origen/destino)
-CREATE POLICY "Lectura global de congregaciones activas"
-  ON public.congregations FOR SELECT
-  TO authenticated
-  USING (is_active = true OR public.get_auth_role() = 'super_admin');
-
--- Modificación: Solo el super administrador
-CREATE POLICY "Super admin gestiona congregaciones"
-  ON public.congregations FOR ALL
-  TO authenticated
-  USING (public.get_auth_role() = 'super_admin');
-
--- Administrador de congregación puede actualizar el logo o detalles de su congregación
-CREATE POLICY "Admin de congregacion actualiza su logo"
-  ON public.congregations FOR UPDATE
-  TO authenticated
-  USING (id = public.get_auth_congregation_id())
-  WITH CHECK (id = public.get_auth_congregation_id());
-
--- 2. Políticas de Perfiles:
-CREATE POLICY "Usuarios leen su propio perfil"
-  ON public.profiles FOR SELECT
-  TO authenticated
-  USING (id = auth.uid() OR public.get_auth_role() = 'super_admin');
-
-CREATE POLICY "Super admin administra perfiles"
-  ON public.profiles FOR ALL
-  TO authenticated
-  USING (public.get_auth_role() = 'super_admin');
-
--- 3. Políticas de Speakers:
--- Lectura: Cualquier usuario autenticado puede leer conferenciantes activos (para seleccionarlos como visitantes)
-CREATE POLICY "Lectura de conferenciantes activos"
-  ON public.speakers FOR SELECT
-  TO authenticated
-  USING (is_active = true OR congregation_id = public.get_auth_congregation_id() OR public.get_auth_role() = 'super_admin');
-
--- Escritura: Solo de su propia congregación
-CREATE POLICY "Admin gestiona sus propios conferenciantes"
-  ON public.speakers FOR ALL
-  TO authenticated
-  USING (congregation_id = public.get_auth_congregation_id() OR public.get_auth_role() = 'super_admin')
-  WITH CHECK (congregation_id = public.get_auth_congregation_id() OR public.get_auth_role() = 'super_admin');
-
--- 4. Políticas de Talks:
--- Lectura: Todos los autenticados leen conferencias activas (para asignar visitante con su tema)
-CREATE POLICY "Lectura de conferencias activas"
-  ON public.talks FOR SELECT
-  TO authenticated
-  USING (is_active = true OR EXISTS (
-    SELECT 1 FROM public.speakers s
-    WHERE s.id = speaker_id AND (s.congregation_id = public.get_auth_congregation_id() OR public.get_auth_role() = 'super_admin')
-  ));
-
--- Escritura: Solo para conferenciantes de su congregación
-CREATE POLICY "Admin gestiona conferencias de su congregacion"
-  ON public.talks FOR ALL
-  TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM public.speakers s
-    WHERE s.id = speaker_id AND (s.congregation_id = public.get_auth_congregation_id() OR public.get_auth_role() = 'super_admin')
-  ))
-  WITH CHECK (EXISTS (
-    SELECT 1 FROM public.speakers s
-    WHERE s.id = speaker_id AND (s.congregation_id = public.get_auth_congregation_id() OR public.get_auth_role() = 'super_admin')
-  ));
-
--- 5. Políticas de Entradas (incoming_assignments):
-CREATE POLICY "Admin gestiona entradas de su congregacion"
-  ON public.incoming_assignments FOR ALL
-  TO authenticated
-  USING (local_congregation_id = public.get_auth_congregation_id() OR public.get_auth_role() = 'super_admin')
-  WITH CHECK (local_congregation_id = public.get_auth_congregation_id() OR public.get_auth_role() = 'super_admin');
-
--- 6. Políticas de Salidas (outgoing_assignments):
-CREATE POLICY "Admin gestiona salidas de su congregacion"
-  ON public.outgoing_assignments FOR ALL
-  TO authenticated
-  USING (local_congregation_id = public.get_auth_congregation_id() OR public.get_auth_role() = 'super_admin')
-  WITH CHECK (local_congregation_id = public.get_auth_congregation_id() OR public.get_auth_role() = 'super_admin');
+-- Otorgar permisos directos completos
+GRANT ALL ON TABLE public.congregations TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.profiles TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.speakers TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.talks TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.incoming_assignments TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.outgoing_assignments TO anon, authenticated, service_role;
 
 -- ====================================================================
 -- STORAGE BUCKET PARA LOGOS DE CONGREGACIONES
 -- ====================================================================
 
--- Insertar bucket si no existe
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('congregation-logos', 'congregation-logos', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Políticas de storage para logos
+DROP POLICY IF EXISTS "Logos de congregaciones son públicos" ON storage.objects;
+DROP POLICY IF EXISTS "Usuarios suben logos" ON storage.objects;
+
 CREATE POLICY "Logos de congregaciones son públicos"
   ON storage.objects FOR SELECT
   TO public
   USING (bucket_id = 'congregation-logos');
 
-CREATE POLICY "Usuarios autenticados suben logos"
-  ON storage.objects FOR INSERT
-  TO authenticated
+CREATE POLICY "Usuarios suben logos"
+  ON storage.objects FOR ALL
+  TO public
+  USING (bucket_id = 'congregation-logos')
   WITH CHECK (bucket_id = 'congregation-logos');
-
-CREATE POLICY "Usuarios actualizan logos de su congregación"
-  ON storage.objects FOR UPDATE
-  TO authenticated
-  USING (bucket_id = 'congregation-logos');

@@ -254,6 +254,15 @@ export const IncomingAssignments: React.FC = () => {
 
   const monthLabel = `${SPANISH_MONTHS[selectedMonth - 1]} ${selectedYear}`;
 
+  if (!currentCongregation) {
+    return (
+      <EmptyState
+        title="No hay congregación seleccionada"
+        description="Por favor selecciona una congregación en la barra lateral para ver y gestionar las visitas de conferenciantes."
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Banner / Month Selector */}

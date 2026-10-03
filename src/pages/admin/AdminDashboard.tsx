@@ -21,9 +21,14 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
-  const { allCongregations } = useAuth();
+  const { allCongregations, refreshData } = useAuth();
   const [totalSpeakers, setTotalSpeakers] = useState(0);
   const [totalTalks, setTotalTalks] = useState(0);
+
+  useEffect(() => {
+    refreshData();
+    loadGlobalTotals();
+  }, []);
 
   useEffect(() => {
     loadGlobalTotals();
