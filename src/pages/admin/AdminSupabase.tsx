@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS public.speakers (
 -- 4. TABLA: talks (conferencias)
 CREATE TABLE IF NOT EXISTS public.talks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    speaker_id UUID NOT NULL REFERENCES public.speakers(id) ON DELETE CASCADE,
+  speaker_id UUID REFERENCES public.speakers(id) ON DELETE SET NULL,
+  congregation_id UUID NOT NULL REFERENCES public.congregations(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     song_number INTEGER NOT NULL,
     theme_number INTEGER,
@@ -79,6 +80,15 @@ CREATE TABLE IF NOT EXISTS public.talks (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.talks ADD COLUMN IF NOT EXISTS congregation_id UUID REFERENCES public.congregations(id) ON DELETE CASCADE;
+UPDATE public.talks AS talk SET congregation_id = speaker.congregation_id
+FROM public.speakers AS speaker WHERE talk.speaker_id = speaker.id AND talk.congregation_id IS NULL;
+ALTER TABLE public.talks ALTER COLUMN congregation_id SET NOT NULL;
+ALTER TABLE public.talks ALTER COLUMN speaker_id DROP NOT NULL;
+ALTER TABLE public.talks DROP CONSTRAINT IF EXISTS talks_speaker_id_fkey;
+ALTER TABLE public.talks ADD CONSTRAINT talks_speaker_id_fkey
+  FOREIGN KEY (speaker_id) REFERENCES public.speakers(id) ON DELETE SET NULL;
 
 -- 5. TABLA: readers (lectores de La Atalaya y presidentes locales)
 CREATE TABLE IF NOT EXISTS public.readers (
@@ -112,6 +122,8 @@ CREATE TABLE IF NOT EXISTS public.incoming_assignments (
     meeting_time TEXT NOT NULL,
     is_no_meeting BOOLEAN NOT NULL DEFAULT false,
     no_meeting_reason TEXT,
+    is_memorial BOOLEAN NOT NULL DEFAULT false,
+    memorial_date DATE,
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -122,6 +134,8 @@ ALTER TABLE public.incoming_assignments ADD COLUMN IF NOT EXISTS reader_id UUID 
 ALTER TABLE public.incoming_assignments ADD COLUMN IF NOT EXISTS president_id UUID REFERENCES public.readers(id) ON DELETE SET NULL;
 ALTER TABLE public.incoming_assignments ADD COLUMN IF NOT EXISTS is_no_meeting BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE public.incoming_assignments ADD COLUMN IF NOT EXISTS no_meeting_reason TEXT;
+ALTER TABLE public.incoming_assignments ADD COLUMN IF NOT EXISTS is_memorial BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.incoming_assignments ADD COLUMN IF NOT EXISTS memorial_date DATE;
 ALTER TABLE public.incoming_assignments ALTER COLUMN origin_congregation_id DROP NOT NULL;
 ALTER TABLE public.incoming_assignments ALTER COLUMN speaker_id DROP NOT NULL;
 ALTER TABLE public.incoming_assignments ALTER COLUMN talk_id DROP NOT NULL;
@@ -148,6 +162,7 @@ CREATE TABLE IF NOT EXISTS public.outgoing_assignments (
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_speakers_congregation ON public.speakers(congregation_id);
 CREATE INDEX IF NOT EXISTS idx_talks_speaker ON public.talks(speaker_id);
+CREATE INDEX IF NOT EXISTS idx_talks_congregation ON public.talks(congregation_id);
 CREATE INDEX IF NOT EXISTS idx_readers_congregation ON public.readers(congregation_id);
 CREATE INDEX IF NOT EXISTS idx_incoming_local_date ON public.incoming_assignments(local_congregation_id, meeting_date);
 CREATE INDEX IF NOT EXISTS idx_incoming_reader ON public.incoming_assignments(reader_id);

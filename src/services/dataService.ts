@@ -306,13 +306,33 @@ export const dataService = {
       this._getRawTalks(),
     ]);
 
+    let outgoingRows: Array<Pick<OutgoingAssignment, 'speaker_id' | 'talk_id'>> = [];
+    if (rawSpeakers.length > 0 && isSupabaseConfigured()) {
+      const sb = getSupabaseClient();
+      if (sb) {
+        const { data, error } = await sb
+          .from('outgoing_assignments')
+          .select('speaker_id, talk_id')
+          .in('speaker_id', rawSpeakers.map((speaker) => speaker.id));
+        if (!error && data) outgoingRows = data as typeof outgoingRows;
+      }
+    }
+    if (outgoingRows.length === 0) {
+      outgoingRows = getLocalItem<OutgoingAssignment[]>(KEY_OUTGOING, []);
+    }
+
     return rawSpeakers.map((s) => {
       const c = congs.find((x) => x.id === s.congregation_id);
-      const speakerTalks = rawTalks.filter((t) => t.speaker_id === s.id);
+      const assignedTalkIds = outgoingRows
+        .filter((assignment) => assignment.speaker_id === s.id)
+        .map((assignment) => assignment.talk_id);
+      const legacyTalkIds = rawTalks
+        .filter((talk) => talk.speaker_id === s.id)
+        .map((talk) => talk.id);
       return {
         ...s,
         congregation_name: c ? c.name : 'Desconocida',
-        talks_count: speakerTalks.length,
+        talks_count: new Set([...assignedTalkIds, ...legacyTalkIds]).size,
       };
     });
   },
@@ -400,10 +420,9 @@ export const dataService = {
     }
 
     const talks = getLocalItem<Talk[]>(KEY_TALKS, []);
-    setLocalItem(
-      KEY_TALKS,
-      talks.filter((t) => t.speaker_id !== id)
-    );
+    setLocalItem(KEY_TALKS, talks.map((talk) =>
+      talk.speaker_id === id ? { ...talk, speaker_id: null } : talk
+    ));
 
     const list = getLocalItem<Speaker[]>(KEY_SPEAKERS, []);
     setLocalItem(
@@ -422,13 +441,15 @@ export const dataService = {
       this._getRawSpeakers(),
     ]);
 
-    const talksWithDetails = rawTalks.map((t) => {
-      const spk = rawSpeakers.find((s) => s.id === t.speaker_id);
-      return {
+    const talksWithDetails = rawTalks.flatMap((t): Talk[] => {
+      const spk = t.speaker_id ? rawSpeakers.find((s) => s.id === t.speaker_id) : undefined;
+      const talkCongregationId = t.congregation_id || spk?.congregation_id;
+      if (!talkCongregationId) return [];
+      return [{
         ...t,
-        speaker_name: spk ? spk.full_name : 'Desconocido',
-        congregation_id: spk ? spk.congregation_id : undefined,
-      };
+        speaker_name: spk?.full_name,
+        congregation_id: talkCongregationId,
+      }];
     });
 
     if (congregationId) {
@@ -859,7 +880,9 @@ export const dataService = {
         speaker_phone: spk?.phone,
         talk_title: tlk ? tlk.title : a.is_no_meeting ? '' : 'Tema no especificado',
         reader_name: rdr ? rdr.full_name : undefined,
+        reader_phone: rdr?.phone,
         president_name: pres ? pres.full_name : undefined,
+        president_phone: pres?.phone,
       };
     });
   },

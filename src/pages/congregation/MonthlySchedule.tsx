@@ -12,6 +12,7 @@ import { MonthSelector } from '../../components/common/MonthSelector';
 import { EmptyState } from '../../components/common/EmptyState';
 import { useToast } from '../../components/common/Toast';
 import {
+  formatFullSpanishDate,
   formatTime12Hour,
   getCurrentMonthAndYear,
   SPANISH_MONTHS,
@@ -361,6 +362,11 @@ export const MonthlySchedule: React.FC = () => {
                               <span className="font-semibold text-slate-900 leading-snug text-md sm:text-md">
                                 {item.talk_title ? `“${item.talk_title}”` : <span className="italic text-slate-400 font-normal">Por asignar</span>}
                               </span>
+                              {item.is_memorial && (
+                                <span className="text-[10px] font-bold uppercase text-rose-800">
+                                  Conmemoración{item.memorial_date ? ` · ${formatFullSpanishDate(item.memorial_date)}` : ''}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>

@@ -47,7 +47,8 @@ export interface Speaker {
 
 export interface Talk {
   id: string;
-  speaker_id: string;
+  speaker_id?: string | null;
+  congregation_id: string;
   title: string;
   song_number: number;
   theme_number?: number;
@@ -56,7 +57,6 @@ export interface Talk {
   updated_at: string;
   // joined fields
   speaker_name?: string;
-  congregation_id?: string;
 }
 
 export interface Reader {
@@ -95,8 +95,12 @@ export interface IncomingAssignment {
   speaker_name?: string;
   speaker_phone?: string;
   reader_name?: string;
+  reader_phone?: string;
   president_name?: string;
+  president_phone?: string;
   talk_title?: string;
+  is_memorial?: boolean;
+  memorial_date?: string;
 }
 
 export interface OutgoingAssignment {

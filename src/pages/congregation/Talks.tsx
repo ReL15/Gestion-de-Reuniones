@@ -29,6 +29,7 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
   const { showToast } = useToast();
   const [talks, setTalks] = useState<Talk[]>([]);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [speakerTalkIds, setSpeakerTalkIds] = useState<Record<string, string[]>>({});
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>(initialSpeakerFilter || 'all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -37,8 +38,8 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTalk, setEditingTalk] = useState<Talk | null>(null);
   const [formData, setFormData] = useState({
-    speaker_id: '',
     title: '',
+    congregation_id: '',
     song_number: 1,
     theme_number: '' as string | number,
     is_active: true,
@@ -63,12 +64,20 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
     if (!currentCongregation) return;
     setIsLoading(true);
     try {
-      const [spks, tlks] = await Promise.all([
+      const [spks, tlks, assignments] = await Promise.all([
         dataService.getSpeakers(currentCongregation.id),
         dataService.getTalks(undefined, currentCongregation.id),
+        dataService.getOutgoingAssignments(currentCongregation.id),
       ]);
       setSpeakers(spks);
       setTalks(tlks);
+      const assignmentsBySpeaker: Record<string, string[]> = {};
+      assignments.forEach((assignment) => {
+        const ids = assignmentsBySpeaker[assignment.speaker_id] || [];
+        if (!ids.includes(assignment.talk_id)) ids.push(assignment.talk_id);
+        assignmentsBySpeaker[assignment.speaker_id] = ids;
+      });
+      setSpeakerTalkIds(assignmentsBySpeaker);
     } catch (err) {
       console.error('Error loading talks:', err);
       showToast('Error al cargar conferencias', 'error');
@@ -77,14 +86,10 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
     }
   };
 
-  const handleOpenCreate = (preselectedSpeakerId?: string) => {
-    const spkId =
-      preselectedSpeakerId ||
-      (selectedSpeakerId !== 'all' ? selectedSpeakerId : speakers[0]?.id || '');
-
+  const handleOpenCreate = () => {
     setEditingTalk(null);
     setFormData({
-      speaker_id: spkId,
+      congregation_id: currentCongregation?.id || '',
       title: '',
       song_number: 1,
       theme_number: '',
@@ -96,7 +101,7 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
   const handleOpenEdit = (talk: Talk) => {
     setEditingTalk(talk);
     setFormData({
-      speaker_id: talk.speaker_id,
+      congregation_id: talk.congregation_id || currentCongregation?.id || '',
       title: talk.title,
       song_number: talk.song_number,
       theme_number: talk.theme_number || '',
@@ -121,10 +126,6 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.speaker_id) {
-      showToast('Por favor selecciona el conferenciante asignado.', 'error');
-      return;
-    }
     if (!formData.title.trim()) {
       showToast('Por favor escribe el título del discurso.', 'error');
       return;
@@ -137,7 +138,8 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
     try {
       if (editingTalk) {
         await dataService.updateTalk(editingTalk.id, {
-          speaker_id: formData.speaker_id,
+          congregation_id: formData.congregation_id,
+          speaker_id: null,
           title: formData.title.trim(),
           song_number: Number(formData.song_number),
           theme_number: formData.theme_number ? Number(formData.theme_number) : undefined,
@@ -146,13 +148,14 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
         showToast('Conferencia actualizada exitosamente.');
       } else {
         await dataService.createTalk({
-          speaker_id: formData.speaker_id,
+          congregation_id: formData.congregation_id,
+          speaker_id: null,
           title: formData.title.trim(),
           song_number: Number(formData.song_number),
           theme_number: formData.theme_number ? Number(formData.theme_number) : undefined,
           is_active: formData.is_active,
         });
-        showToast('Conferencia agregada al conferenciante.');
+        showToast('Conferencia agregada al catálogo.');
       }
       setIsModalOpen(false);
       loadData();
@@ -176,7 +179,8 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
 
   // Filter talks
   const filteredTalks = talks.filter((t) => {
-    const matchesSpeaker = selectedSpeakerId === 'all' || t.speaker_id === selectedSpeakerId;
+    const matchesSpeaker = selectedSpeakerId === 'all' ||
+      (speakerTalkIds[selectedSpeakerId] || []).includes(t.id);
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       t.title.toLowerCase().includes(q) ||
@@ -204,14 +208,13 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
               Conferencias y Discursos
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Bosquejos preparados y canciones asignadas por conferenciante
+              Catálogo congregacional de temas y canciones; el conferenciante se asigna al programar
             </p>
           </div>
 
           <button
             type="button"
             onClick={() => handleOpenCreate()}
-            disabled={speakers.length === 0}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors shrink-0 disabled:opacity-50"
           >
             <Plus className="w-4 h-4" />
@@ -230,10 +233,10 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
                 onChange={(e) => setSelectedSpeakerId(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
               >
-                <option value="all">Todos los conferenciantes ({speakers.length})</option>
+                <option value="all">Todos los temas ({talks.length})</option>
                 {speakers.map((spk) => (
                   <option key={spk.id} value={spk.id}>
-                    {spk.full_name} ({talks.filter((t) => t.speaker_id === spk.id).length} temas)
+                    {spk.full_name} ({(speakerTalkIds[spk.id] || []).length} temas asignados)
                   </option>
                 ))}
               </select>
@@ -255,23 +258,16 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
       </div>
 
       {/* Talks List */}
-      {speakers.length === 0 ? (
-        <EmptyState
-          title="Primero debes registrar conferenciantes"
-          description="Para poder asociar conferencias y números de canción, registra al menos un conferenciante local."
-          actionLabel="Ir a Conferenciantes"
-          onAction={() => {}}
-        />
-      ) : filteredTalks.length === 0 ? (
+      {filteredTalks.length === 0 ? (
         <EmptyState
           title="No hay conferencias registradas"
           description={
             searchQuery
               ? `No hay coincidencias para "${searchQuery}".`
-              : 'Agrega los temas y canciones que este conferenciante tiene preparados.'
+              : 'Agrega conferencias al catálogo de la congregación.'
           }
           actionLabel="Agregar Conferencia"
-          onAction={() => handleOpenCreate(selectedSpeakerId !== 'all' ? selectedSpeakerId : undefined)}
+          onAction={handleOpenCreate}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -282,11 +278,6 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg">
-                    <User className="w-3.5 h-3.5" />
-                    <span>{talk.speaker_name}</span>
-                  </div>
-
                   <span
                     className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
                       talk.is_active
@@ -346,30 +337,9 @@ export const Talks: React.FC<TalksProps> = ({ initialSpeakerFilter }) => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingTalk ? 'Editar Conferencia' : 'Agregar Conferencia'}
-        subtitle="Registra el título y el número de canción asignado"
+        subtitle="Registra una conferencia en el catálogo de la congregación"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
-              Conferenciante Asignado *
-            </label>
-            <select
-              required
-              value={formData.speaker_id}
-              onChange={(e) => setFormData({ ...formData, speaker_id: e.target.value })}
-              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-            >
-              <option value="" disabled>
-                -- Seleccionar conferenciante --
-              </option>
-              {speakers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.full_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* Quick Helper Catalog */}
           <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl space-y-1.5">
             <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900">

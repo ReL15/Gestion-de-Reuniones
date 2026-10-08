@@ -79,18 +79,16 @@ export const SmartTalkSearch: React.FC<SmartTalkSearchProps> = ({
         tlk.title.toLowerCase().includes(cleanQuery) ||
         (tlk.theme_number && String(tlk.theme_number).includes(cleanQuery))
       ) {
-        const spk = speakers.find((s) => s.id === tlk.speaker_id);
-        if (spk) {
-          const cong = congregations.find((c) => c.id === spk.congregation_id);
-          if (cong) {
-            results.push({
-              type: 'talk',
-              congregation: cong,
-              speaker: spk,
-              talk: tlk,
-              matchHighlight: tlk.title,
-            });
-          }
+        const spk = tlk.speaker_id ? speakers.find((s) => s.id === tlk.speaker_id) : undefined;
+        const cong = congregations.find((c) => c.id === (tlk.congregation_id || spk?.congregation_id));
+        if (cong) {
+          results.push({
+            type: 'talk',
+            congregation: cong,
+            speaker: spk,
+            talk: tlk,
+            matchHighlight: tlk.title,
+          });
         }
       }
     });

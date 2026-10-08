@@ -11,6 +11,7 @@ import {
   Trash2,
   AlertCircle,
   HelpCircle,
+  MessageCircle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { dataService } from '../../services/dataService';
@@ -25,6 +26,7 @@ import { Modal } from '../../components/common/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../components/common/Toast';
 import { EmptyState } from '../../components/common/EmptyState';
+import { whatsAppUrl } from '../../utils/whatsapp';
 import {
   formatFullSpanishDate,
   formatTime12Hour,
@@ -153,10 +155,9 @@ export const OutgoingAssignments: React.FC = () => {
   const handleSpeakerChange = (spkId: string) => {
     setFormSpeakerId(spkId);
     setFormTalkId('');
-    const spkTalks = localTalks.filter((t) => t.speaker_id === spkId);
-    if (spkTalks.length > 0) {
-      setFormTalkId(spkTalks[0].id);
-      setFormSongNumber(spkTalks[0].song_number);
+    if (localTalks.length > 0) {
+      setFormTalkId(localTalks[0].id);
+      setFormSongNumber(localTalks[0].song_number);
     } else {
       setFormSongNumber(1);
     }
@@ -243,7 +244,7 @@ export const OutgoingAssignments: React.FC = () => {
   };
 
   const selectedDestCong = allCongregations.find((c) => c.id === formDestinationCongId);
-  const speakerTalks = localTalks.filter((t) => t.speaker_id === formSpeakerId);
+  const speakerTalks = localTalks;
   const monthLabel = `${SPANISH_MONTHS[selectedMonth - 1]} ${selectedYear}`;
 
   if (!currentCongregation) {
@@ -359,6 +360,11 @@ export const OutgoingAssignments: React.FC = () => {
                       <span className="text-[11px] text-slate-500 font-mono block mt-0.5">
                         {assignment.speaker_phone}
                       </span>
+                    )}
+                    {assignment.speaker_phone && (
+                      <a href={whatsAppUrl(assignment.speaker_phone, `Hola ${assignment.speaker_name}, te recordamos tu conferencia en ${assignment.destination_congregation_name} el ${assignment.meeting_date} a las ${assignment.meeting_time}.`)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800">
+                        <MessageCircle className="w-3.5 h-3.5" /> Avisar por WhatsApp
+                      </a>
                     )}
                   </div>
 
@@ -528,7 +534,7 @@ export const OutgoingAssignments: React.FC = () => {
                 {formSpeakerId
                   ? speakerTalks.length > 0
                     ? '-- Seleccionar conferencia --'
-                    : 'Este conferenciante no tiene temas asignados'
+                    : 'No hay conferencias registradas en el catálogo'
                   : 'Primero selecciona el conferenciante local'}
               </option>
               {speakerTalks.map((t) => (
