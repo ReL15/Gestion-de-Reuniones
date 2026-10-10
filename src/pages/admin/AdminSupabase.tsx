@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS public.congregations (
     weekday_meeting_time TEXT NOT NULL DEFAULT '19:00',
     weekend_meeting_day TEXT NOT NULL CHECK (weekend_meeting_day IN ('Sábado', 'Domingo')),
     weekend_meeting_time TEXT NOT NULL DEFAULT '09:30',
+    maps_url TEXT,
     logo_url TEXT,
     is_active BOOLEAN NOT NULL DEFAULT true,
     coordinator_name TEXT,
@@ -42,6 +43,8 @@ CREATE TABLE IF NOT EXISTS public.congregations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.congregations ADD COLUMN IF NOT EXISTS maps_url TEXT;
 
 -- 2. TABLA: profiles (usuarios con roles)
 CREATE TABLE IF NOT EXISTS public.profiles (

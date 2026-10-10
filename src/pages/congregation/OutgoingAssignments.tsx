@@ -362,7 +362,32 @@ export const OutgoingAssignments: React.FC = () => {
                       </span>
                     )}
                     {assignment.speaker_phone && (
-                      <a href={whatsAppUrl(assignment.speaker_phone, `Hola ${assignment.speaker_name}, te recordamos tu conferencia en ${assignment.destination_congregation_name} el ${assignment.meeting_date} a las ${assignment.meeting_time}.`)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800">
+                      <a
+                        href={whatsAppUrl(
+                          assignment.speaker_phone,
+                          [
+                            `\u{1F44B} Hola *${assignment.speaker_name}*. Te recordamos tu asignación para la siguiente fecha:`,
+                            '',
+                            '\u{1F3A4} *Asignación:* Conferenciante visitante',
+                            `\u{1F4C5} *Fecha:* ${formatFullSpanishDate(assignment.meeting_date)}`,
+                            `\u{1F4CC} *Título:* ${assignment.talk_title || 'Sin título registrado'}`,
+                            `\u{1F3DB}\u{FE0F} *Congregación:* ${assignment.destination_congregation_name || 'Por confirmar'}`,
+                            `\u{1F552} *Hora:* ${formatTime12Hour(assignment.meeting_time)}`,
+                            '',
+                            `\u{1F5FA}\u{FE0F} Para saber cómo llegar, puedes presionar el siguiente enlace: ${
+                              allCongregations.find(
+                                (congregation) => congregation.id === assignment.destination_congregation_id
+                              )?.maps_url ||
+                              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                assignment.destination_congregation_name || ''
+                              )}`
+                            }`,
+                          ].join('\n')
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
+                      >
                         <MessageCircle className="w-3.5 h-3.5" /> Avisar por WhatsApp
                       </a>
                     )}

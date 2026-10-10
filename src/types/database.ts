@@ -10,6 +10,7 @@ export interface Congregation {
   weekday_meeting_time: string; // e.g. "19:00"
   weekend_meeting_day: WeekendDay;
   weekend_meeting_time: string; // e.g. "09:30"
+  maps_url?: string | null;
   logo_url?: string | null;
   is_active: boolean;
   coordinator_name?: string;

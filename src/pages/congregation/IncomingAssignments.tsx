@@ -533,7 +533,33 @@ export const IncomingAssignments: React.FC = () => {
                             {assignment.president_name || 'Sin asignar'}
                           </p>
                           {assignment.president_phone && assignment.president_name && (
-                            <a href={whatsAppUrl(assignment.president_phone, `Hola ${assignment.president_name}, te recordamos que presides la reunión del ${assignment.meeting_date} a las ${assignment.meeting_time}.`)} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                            <a
+                              href={whatsAppUrl(
+                                assignment.president_phone,
+                                [
+                                  `\u{1F44B} Hola *${assignment.president_name}*. Te recordamos tu asignación para la siguiente fecha:`,
+                                  '',
+                                  '\u{1F6E1}\u{FE0F} *Asignación:* Presidente de la reunión',
+                                  `\u{1F4C5} *Fecha:* ${formatFullSpanishDate(assignment.meeting_date)}`,
+                                  `\u{1F552} *Hora:* ${formatTime12Hour(assignment.meeting_time)}`,
+                                  ...(assignment.speaker_name
+                                    ? [
+                                        '',
+                                        `\u{1F3A4} *Conferenciante visitante:* ${assignment.speaker_name}`,
+                                        ...(assignment.talk_title
+                                          ? [`\u{1F4CC} *Título de la conferencia:* ${assignment.talk_title}`]
+                                          : []),
+                                        ...(assignment.origin_congregation_name
+                                          ? [`\u{1F3DB}\u{FE0F} *Congregación de origen:* ${assignment.origin_congregation_name}`]
+                                          : []),
+                                      ]
+                                    : []),
+                                ].join('\n')
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700"
+                            >
                               <MessageCircle className="w-3 h-3" /> WhatsApp
                             </a>
                           )}
@@ -550,7 +576,21 @@ export const IncomingAssignments: React.FC = () => {
                             {assignment.reader_name || 'Sin asignar'}
                           </p>
                           {assignment.reader_phone && assignment.reader_name && (
-                            <a href={whatsAppUrl(assignment.reader_phone, `Hola ${assignment.reader_name}, te recordamos tu lectura de La Atalaya el ${assignment.meeting_date} a las ${assignment.meeting_time}.`)} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                            <a
+                              href={whatsAppUrl(
+                                assignment.reader_phone,
+                                [
+                                  `\u{1F44B} Hola *${assignment.reader_name}*. Te recordamos tu asignación para la siguiente fecha:`,
+                                  '',
+                                  '\u{1F4D6} *Asignación:* Lector de La Atalaya',
+                                  `\u{1F4C5} *Fecha:* ${formatFullSpanishDate(assignment.meeting_date)}`,
+                                  `\u{1F552} *Hora:* ${formatTime12Hour(assignment.meeting_time)}`,
+                                ].join('\n')
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700"
+                            >
                               <MessageCircle className="w-3 h-3" /> WhatsApp
                             </a>
                           )}

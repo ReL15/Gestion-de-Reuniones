@@ -12,6 +12,7 @@ import {
   Phone,
   CheckCircle2,
   XCircle,
+  MapPin,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { dataService } from '../../services/dataService';
@@ -21,6 +22,46 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../components/common/Toast';
 import { EmptyState } from '../../components/common/EmptyState';
 import { formatTime12Hour } from '../../utils/dateUtils';
+
+const getGoogleMapsEmbedUrl = (link: string): string | null => {
+  if (!link.trim()) return null;
+
+  try {
+    const url = new URL(link.trim());
+    const hostname = url.hostname.toLowerCase();
+    const isGoogleMapsHost =
+      hostname === 'maps.app.goo.gl' ||
+      hostname === 'goo.gl' ||
+      hostname === 'google.com' ||
+      hostname.endsWith('.google.com') ||
+      /^maps\.google\.[a-z.]+$/.test(hostname);
+    const isMapsPath =
+      url.pathname.startsWith('/maps') ||
+      hostname.startsWith('maps.google.') ||
+      hostname === 'maps.app.goo.gl' ||
+      hostname === 'goo.gl';
+
+    if (url.protocol !== 'https:' || !isGoogleMapsHost || !isMapsPath) return null;
+
+    const coordinates = url.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+    const placePath = url.pathname.match(/\/maps\/(?:place|search)\/([^/]+)/);
+    const location =
+      coordinates?.slice(1).join(',') ||
+      url.searchParams.get('q') ||
+      url.searchParams.get('query') ||
+      url.searchParams.get('destination') ||
+      url.searchParams.get('daddr') ||
+      url.searchParams.get('ll') ||
+      url.searchParams.get('center') ||
+      (placePath ? decodeURIComponent(placePath[1].replace(/\+/g, ' ')) : link.trim());
+    const embedUrl = new URL('https://www.google.com/maps');
+    embedUrl.searchParams.set('q', location);
+    embedUrl.searchParams.set('output', 'embed');
+    return embedUrl.toString();
+  } catch {
+    return null;
+  }
+};
 
 export const AdminCongregations: React.FC = () => {
   const { allCongregations, refreshData } = useAuth();
@@ -42,6 +83,7 @@ export const AdminCongregations: React.FC = () => {
     weekday_meeting_time: '19:00',
     weekend_meeting_day: 'Domingo' as WeekendDay,
     weekend_meeting_time: '09:30',
+    maps_url: '',
     is_active: true,
     coordinator_name: '',
     coordinator_email: '',
@@ -59,6 +101,7 @@ export const AdminCongregations: React.FC = () => {
       weekday_meeting_time: '19:00',
       weekend_meeting_day: 'Domingo',
       weekend_meeting_time: '09:30',
+      maps_url: '',
       is_active: true,
       coordinator_name: '',
       coordinator_email: '',
@@ -75,6 +118,7 @@ export const AdminCongregations: React.FC = () => {
       weekday_meeting_time: cong.weekday_meeting_time,
       weekend_meeting_day: cong.weekend_meeting_day,
       weekend_meeting_time: cong.weekend_meeting_time,
+      maps_url: cong.maps_url || '',
       is_active: cong.is_active,
       coordinator_name: cong.coordinator_name || '',
       coordinator_email: cong.coordinator_email || '',
@@ -89,6 +133,11 @@ export const AdminCongregations: React.FC = () => {
       showToast('Por favor escribe el nombre de la congregación.', 'error');
       return;
     }
+    const mapsUrl = formData.maps_url.trim();
+    if (mapsUrl && !getGoogleMapsEmbedUrl(mapsUrl)) {
+      showToast('Ingresa un enlace válido de Google Maps con protocolo HTTPS.', 'error');
+      return;
+    }
 
     try {
       if (editingCongregation) {
@@ -98,6 +147,7 @@ export const AdminCongregations: React.FC = () => {
           weekday_meeting_time: formData.weekday_meeting_time,
           weekend_meeting_day: formData.weekend_meeting_day,
           weekend_meeting_time: formData.weekend_meeting_time,
+          maps_url: mapsUrl || null,
           is_active: formData.is_active,
           coordinator_name: formData.coordinator_name.trim() || undefined,
           coordinator_email: formData.coordinator_email.trim() || undefined,
@@ -111,6 +161,7 @@ export const AdminCongregations: React.FC = () => {
           weekday_meeting_time: formData.weekday_meeting_time,
           weekend_meeting_day: formData.weekend_meeting_day,
           weekend_meeting_time: formData.weekend_meeting_time,
+          maps_url: mapsUrl || null,
           is_active: formData.is_active,
           coordinator_name: formData.coordinator_name.trim() || undefined,
           coordinator_email: formData.coordinator_email.trim() || undefined,
@@ -329,6 +380,39 @@ export const AdminCongregations: React.FC = () => {
               placeholder="Ej. Congregación Santa Tecla"
               className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-semibold"
             />
+          </div>
+
+          <div className="pt-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+              Ubicación del Salón del Reino (Google Maps)
+            </label>
+            <div className="relative">
+              <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="url"
+                value={formData.maps_url}
+                onChange={(e) => setFormData({ ...formData, maps_url: e.target.value })}
+                placeholder="https://maps.app.goo.gl/..."
+                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Pega el enlace para compartir de Google Maps. Se incluirá en los avisos de salida.
+            </p>
+            {getGoogleMapsEmbedUrl(formData.maps_url) && (
+              <iframe
+                title={`Mapa de ${formData.name || 'la congregación'}`}
+                src={getGoogleMapsEmbedUrl(formData.maps_url) || undefined}
+                className="w-full h-56 mt-3 rounded-xl border border-slate-200"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            )}
+            {formData.maps_url && !getGoogleMapsEmbedUrl(formData.maps_url) && (
+              <p className="text-[11px] text-rose-600 mt-1">
+                El enlace debe ser de Google Maps y comenzar con https://.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
